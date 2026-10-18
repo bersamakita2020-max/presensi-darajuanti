@@ -1,0 +1,453 @@
+/* Presensi Digital Puskesmas Dara Juanti — aplikasi pegawai (PWA). Seluruh validasi final ada di server. */
+(function () {
+  'use strict';
+  const C = window.PRESENSI_CONFIG;
+  const $ = (s, el) => (el || document).querySelector(s);
+  const app = $('#app');
+  const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const LS = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } }, del: k => { try { localStorage.removeItem(k); } catch (e) { } } };
+  const S = { token: LS.get('dj_token'), device: null, info: null, offset: 0, gps: null, gpsErr: '', beranda: null, watch: null, timers: [], installEvt: null, sandiLogin: '' };
+  const pad = n => (n < 10 ? '0' : '') + n;
+  const now = () => Date.now() + S.offset;
+  const wib = ms => new Date(ms + 7 * 3600000);
+  const jamTeks = (ms, det) => { const d = wib(ms); return pad(d.getUTCHours()) + '.' + pad(d.getUTCMinutes()) + (det ? ':' + pad(d.getUTCSeconds()) : ''); };
+  const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const menitTeks = m => { m = Math.round(m || 0); const j = Math.floor(m / 60), s = m % 60; return (j ? j + ' jam ' : '') + (s || !j ? s + ' menit' : '').trim(); };
+  const jarakTeks = m => m >= 1000 ? (Math.round(m / 100) / 10).toString().replace('.', ',') + ' km' : Math.round(m) + ' m';
+  const WARNA = { P: '#16a34a', S: '#d97706', M: '#4338ca', R: '#0f766e', LJ: '#64748b', L: '#94a3b8', C: '#7c3aed' };
+  const I = {
+    masuk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>',
+    pulang: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
+    izin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg>',
+    sakit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>',
+    tl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="10" r="2.6"/></svg>',
+    home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
+    kal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>',
+    riw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+    ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+    jam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="48" height="48"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
+    file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
+  };
+
+  // ---------- util ----------
+  function toast(msg, jenis, ms) { const t = document.createElement('div'); t.className = 'toast ' + (jenis || ''); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), ms || 3200); }
+  function clearTimers() { S.timers.forEach(clearInterval); S.timers = []; if (window.Scanner) Scanner.berhenti(); }
+  function rid() { const a = new Uint8Array(12); crypto.getRandomValues(a); return 'r-' + Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); }
+  function deviceId() {
+    let d = LS.get('dj_device');
+    if (!d || !/^[A-Za-z0-9_-]{32,128}$/.test(d)) { const a = new Uint8Array(32); crypto.getRandomValues(a); d = btoa(String.fromCharCode.apply(null, a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); LS.set('dj_device', d); }
+    return d;
+  }
+  function labelPerangkat() { const ua = navigator.userAgent; const m = /Android [\d.]+;[^;)]*?;?\s*([^;)]+?)\s*(Build|\))/.exec(ua); return (m ? 'Android · ' + m[1] : (/(iPhone|iPad)/.exec(ua) || ['Peramban'])[0]) + ' · ' + (/(Chrome|Firefox|Safari)\/[\d]+/.exec(ua) || [''])[0]; }
+  function salam(ms) { const h = wib(ms).getUTCHours(); return h < 10 ? 'Selamat pagi,' : h < 15 ? 'Selamat siang,' : h < 18 ? 'Selamat sore,' : 'Selamat malam,'; }
+  function logo() { return (S.info && S.info.logo) || C.LOGO; }
+  async function api(aksi, data, opsi) {
+    data = Object.assign({ device_id: S.device }, data || {});
+    try { return await API.kirim(aksi, data, S.token, opsi); }
+    catch (e) {
+      if (e.kode === 'SESI') { keluarLokal(); toast('Sesi berakhir. Silakan masuk kembali.', 'bad'); go('login'); }
+      else if (e.kode === 'NONAKTIF') { keluarLokal(); viewTerkunci(e.message); }
+      else if (e.kode === 'WAJIB_GANTI') go('aktivasi');
+      throw e;
+    }
+  }
+  function keluarLokal() { S.token = null; LS.del('dj_token'); S.beranda = null; if (S.watch !== null) { navigator.geolocation.clearWatch(S.watch); S.watch = null; } }
+  // ---------- GPS ----------
+  function jarakKe(lat, lng) {
+    const g = S.info && S.info.geo; if (!g) return null;
+    const R = 6371000, r = Math.PI / 180, dLat = (g.lat - lat) * r, dLng = (g.lng - lng) * r;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat * r) * Math.cos(g.lat * r) * Math.sin(dLng / 2) ** 2;
+    let d = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)), rad = g.radius;
+    (g.lain || []).forEach(l => { const dl = 2 * R * Math.asin(Math.sqrt(Math.sin((l.lat - lat) * r / 2) ** 2 + Math.cos(lat * r) * Math.cos(l.lat * r) * Math.sin((l.lng - lng) * r / 2) ** 2)); if (dl - (l.radius || rad) < d - rad) { d = dl; rad = l.radius || rad; } });
+    return { jarak: d, radius: rad, dalam: d <= rad };
+  }
+  function mulaiGps() {
+    if (!('geolocation' in navigator)) { S.gpsErr = 'Perangkat tidak mendukung GPS.'; return; }
+    if (S.watch !== null) return;
+    S.watch = navigator.geolocation.watchPosition(p => { S.gps = { lat: p.coords.latitude, lng: p.coords.longitude, akurasi: Math.round(p.coords.accuracy), ts: Date.now() }; S.gpsErr = ''; renderArea(); },
+      e => { S.gpsErr = e.code === 1 ? 'Izin lokasi ditolak' : 'GPS belum aktif'; renderArea(); }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+  }
+  function posisiSegar() {
+    return new Promise((ok, no) => {
+      if (S.gps && Date.now() - S.gps.ts < 15000) return ok(S.gps);
+      navigator.geolocation.getCurrentPosition(p => { S.gps = { lat: p.coords.latitude, lng: p.coords.longitude, akurasi: Math.round(p.coords.accuracy), ts: Date.now() }; ok(S.gps); },
+        e => no(new Error(e.code === 1 ? 'Izin lokasi ditolak. Aktifkan lokasi untuk aplikasi ini di pengaturan browser.' : 'Lokasi GPS belum didapat. Aktifkan GPS lalu coba lagi.')), { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+    });
+  }
+  function areaHtml() {
+    if (S.gpsErr) return '<div class="area err"><i class="dot"></i><div>' + esc(S.gpsErr) + '<small>Aktifkan lokasi</small></div></div>';
+    if (!S.gps) return '<div class="area wait"><i class="dot"></i><div>Mencari lokasi…<small>GPS</small></div></div>';
+    const j = jarakKe(S.gps.lat, S.gps.lng); if (!j) return '';
+    return j.dalam ? '<div class="area in"><i class="dot"></i><div>DALAM AREA<small>±' + jarakTeks(j.jarak) + ' dari titik</small></div></div>'
+      : '<div class="area out"><i class="dot"></i><div>DI LUAR AREA<small>±' + jarakTeks(j.jarak) + ' · Izin/Sakit/TL boleh</small></div></div>';
+  }
+  function renderArea() { const el = $('#area'); if (el) el.innerHTML = areaHtml(); const ck = $('#ck-lokasi'); if (ck) ck.outerHTML = chkLokasi(); }
+  function chkLokasi() {
+    if (!S.gps) return '<div class="chk wait" id="ck-lokasi"><span class="ci">…</span><b>Lokasi</b><span>' + esc(S.gpsErr || 'mencari GPS…') + '</span></div>';
+    const j = jarakKe(S.gps.lat, S.gps.lng);
+    return '<div class="chk ' + (j && j.dalam ? 'ok' : 'bad') + '" id="ck-lokasi"><span class="ci">' + (j && j.dalam ? '✓' : '!') + '</span><b>Lokasi</b><span>' + (j ? jarakTeks(j.jarak) : '-') + ' · akurasi ' + S.gps.akurasi + ' m</span></div>';
+  }
+  // ---------- navigasi ----------
+  function go(v, arg) { location.hash = '#/' + v + (arg ? '/' + arg : ''); }
+  window.addEventListener('hashchange', route);
+  function route() {
+    clearTimers(); closeSheet();
+    const [v, arg] = location.hash.replace(/^#\//, '').split('/');
+    if (!S.token && v !== 'login') return viewLogin();
+    ({ login: viewLogin, aktivasi: viewAktivasi, beranda: viewBeranda, scan: () => viewScan(arg || 'MASUK'), ajukan: () => viewAjukan(arg || 'IZIN'), jadwal: viewJadwal, riwayat: viewRiwayat, profil: viewProfil, hasil: viewHasilTerakhir }[v] || viewBeranda)();
+    window.scrollTo(0, 0);
+  }
+  function nav(aktif) {
+    const b = (k, ic, t) => '<button data-go="' + k + '" class="' + (aktif === k ? 'on' : '') + '">' + I[ic] + '<span>' + t + '</span></button>';
+    return '<nav class="nav">' + b('beranda', 'home', 'Beranda') + b('jadwal', 'kal', 'Jadwal') + b('riwayat', 'riw', 'Riwayat') + b('profil', 'user', 'Profil') + '</nav>';
+  }
+  app.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, g.dataset.arg); } });
+  function appbar(judul, kembali) { return '<div class="appbar"><button class="icon-btn" data-go="' + (kembali || 'beranda') + '" aria-label="Kembali">' + I.back + '</button><h2>' + esc(judul) + '</h2></div>'; }
+
+  // ---------- LOGIN ----------
+  function viewLogin() {
+    app.innerHTML = '<div class="login view" style="padding-bottom:0"><div class="head"><img src="' + esc(logo()) + '" alt="Logo Puskesmas"><h1>Presensi Digital</h1><p>' + esc(C.NAMA_INSTANSI) + ' · ' + esc(C.KABUPATEN) + '</p></div>' +
+      '<form class="card" id="f-login" autocomplete="on"><h3 style="color:var(--navy);font-size:18px;margin-bottom:4px">Masuk</h3><p style="margin:0 0 16px;color:var(--muted);font-size:14px">Gunakan NIP/NIK dan kata sandi dari bagian kepegawaian.</p>' +
+      '<label class="f"><span>NIP / NIK</span><input class="inp" name="u" inputmode="numeric" autocomplete="username" maxlength="18" required value="' + esc(LS.get('dj_user') || '') + '" placeholder="18 digit NIP atau 16 digit NIK"></label>' +
+      '<label class="f"><span>Kata sandi</span><div class="pw"><input class="inp" name="p" type="password" autocomplete="current-password" required maxlength="64"><button type="button" id="tg-pw" aria-label="Tampilkan sandi">' + I.eye + '</button></div></label>' +
+      '<button class="btn pri" id="b-login" type="submit">Masuk</button>' +
+      '<p style="font-size:12.5px;color:var(--muted);margin:14px 0 0;display:flex;gap:8px"><span style="color:var(--hijau)">' + I.lock.replace('width="48" height="48"', 'width="18" height="18"') + '</span><span>Akun hanya dapat dipakai di <b>satu HP terdaftar</b>. Lokasi GPS dicatat setiap presensi.</span></p></form>' +
+      '<div class="foot">Dengan masuk, Anda menyetujui <a href="#" id="l-privasi">Pemberitahuan Privasi</a> (UU No. 27/2022).<br>v' + esc(C.VERSI) + ' · ' + esc(C.NAMA_APLIKASI) + '</div></div>';
+    $('#tg-pw').onclick = () => { const i = $('[name=p]'); i.type = i.type === 'password' ? 'text' : 'password'; };
+    $('#l-privasi').onclick = e => { e.preventDefault(); sheetPrivasi(); };
+    $('#f-login').onsubmit = async e => {
+      e.preventDefault(); const f = e.target, b = $('#b-login');
+      b.disabled = true; b.innerHTML = '<span class="spin"></span> Memeriksa…';
+      try {
+        const u = f.u.value.replace(/\s/g, '');
+        const r = await API.kirim('login', { username: u, password: f.p.value, device_id: S.device, device_label: labelPerangkat() }, null, { ulang: 1 });
+        LS.set('dj_user', u);
+        if (r.menunggu_perangkat) { b.disabled = false; b.textContent = 'Masuk'; return sheetInfo('Menunggu persetujuan', r.pesan); }
+        S.token = r.token; LS.set('dj_token', r.token); S.profil = r.profil; S.sandiLogin = f.p.value;
+        if (r.perangkat_baru) toast('HP ini telah terdaftar sebagai perangkat presensi Anda.', 'ok', 4000);
+        mulaiGps();
+        go(r.wajib_ganti || r.wajib_pin ? 'aktivasi' : 'beranda');
+        if (r.wajib_ganti || r.wajib_pin) S.aktivasi = { ganti: r.wajib_ganti, pin: r.wajib_pin };
+      } catch (err) { b.disabled = false; b.textContent = 'Masuk'; toast(err.message, 'bad', 5000); }
+    };
+  }
+  // ---------- AKTIVASI (ganti sandi + PIN) ----------
+  function viewAktivasi() {
+    const a = S.aktivasi || { ganti: true, pin: true };
+    app.innerHTML = '<div class="view">' + '<div class="hero" style="padding-bottom:70px"><div class="topbar"><img class="logo" src="' + esc(logo()) + '" alt=""><div class="nm"><b>Aktivasi Akun</b><small>Sekali saja</small></div></div><div class="greet"><h1>Amankan akun Anda</h1><div class="sub">Buat kata sandi baru dan PIN 6 digit untuk presensi.</div></div></div>' +
+      '<div class="wrap"><form class="card" id="f-akt">' +
+      (a.ganti ? '<label class="f"><span>Kata sandi baru (min. 8, huruf + angka)</span><input class="inp" name="b1" type="password" minlength="8" maxlength="64" required autocomplete="new-password"></label><label class="f"><span>Ulangi kata sandi baru</span><input class="inp" name="b2" type="password" required autocomplete="new-password"></label>' : '') +
+      (a.pin ? '<div class="row2"><label class="f"><span>PIN 6 digit</span><input class="inp" name="p1" type="password" inputmode="numeric" pattern="\\d{6}" maxlength="6" required></label><label class="f"><span>Ulangi PIN</span><input class="inp" name="p2" type="password" inputmode="numeric" pattern="\\d{6}" maxlength="6" required></label></div><p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">PIN diminta setiap presensi agar HP tidak dapat dipinjamkan. Hindari 123456 / tanggal lahir.</p>' : '') +
+      '<label class="chk" style="color:var(--ink)"><input type="checkbox" name="ok" required style="width:20px;height:20px"> <span>Saya telah membaca <a href="#" id="l-priv2" style="color:var(--hijau);font-weight:600">Pemberitahuan Privasi</a> termasuk pencatatan lokasi & ID perangkat.</span></label>' +
+      '<button class="btn pri" id="b-akt" style="margin-top:8px">Simpan & Lanjutkan</button></form>' +
+      '<div class="note info"><span class="ni">' + I.home + '</span><div><b>Tips:</b> setelah aktivasi, pilih menu browser ⋮ → <b>Tambahkan ke Layar Utama</b> agar aplikasi terbuka seperti aplikasi biasa.</div></div></div></div>';
+    $('#l-priv2').onclick = e => { e.preventDefault(); sheetPrivasi(); };
+    $('#f-akt').onsubmit = async e => {
+      e.preventDefault(); const f = e.target, b = $('#b-akt');
+      if (a.ganti && f.b1.value !== f.b2.value) return toast('Ulangan kata sandi tidak sama.', 'bad');
+      if (a.pin && f.p1.value !== f.p2.value) return toast('Ulangan PIN tidak sama.', 'bad');
+      b.disabled = true; b.innerHTML = '<span class="spin"></span> Menyimpan…';
+      try {
+        if (a.ganti) {
+          if (!S.sandiLogin) { toast('Silakan masuk ulang untuk aktivasi.', 'bad'); keluarLokal(); return go('login'); }
+          const r = await api('gantiSandi', { lama: S.sandiLogin, baru: f.b1.value, pin: a.pin ? f.p1.value : '' });
+          S.token = r.token; LS.set('dj_token', r.token);
+        } else if (a.pin) await api('gantiPin', { sandi: S.sandiLogin, baru: f.p1.value });
+        S.sandiLogin = ''; S.aktivasi = null; LS.set('dj_privasi', '1');
+        toast('Aktivasi berhasil. Selamat bertugas!', 'ok'); go('beranda');
+      } catch (err) { b.disabled = false; b.textContent = 'Simpan & Lanjutkan'; if (err.kode !== 'SESI') toast(err.message, 'bad', 5000); }
+    };
+  }
+  // ---------- BERANDA ----------
+  async function viewBeranda() {
+    mulaiGps();
+    if (!S.beranda) app.innerHTML = '<div class="loading"><span class="spin d"></span>Memuat jadwal…</div>';
+    else renderBeranda();
+    try {
+      const r = await api('beranda', {});
+      S.beranda = r; S.offset = r.waktu_server - Date.now(); if (r.geo) S.info = Object.assign(S.info || {}, { geo: r.geo }); S.profil = r.profil;
+      if (location.hash.indexOf('beranda') >= 0 || location.hash === '' || location.hash === '#/') renderBeranda();
+    } catch (e) { if (!S.beranda && S.token) app.innerHTML = '<div class="loading"><p>' + esc(e.message) + '</p><button class="btn sec" style="max-width:220px" onclick="location.reload()">Coba lagi</button></div>' + nav('beranda'); }
+  }
+  function kartuJadwal(j) {
+    let tag = '<span class="tag mut">BELUM</span>', ket = esc(j.jam);
+    if (j.masuk && j.pulang) tag = '<span class="tag ' + (j.status_pulang === 'PULANG_AWAL' ? 'bad' : 'ok') + '">SELESAI</span>';
+    else if (j.masuk) tag = '<span class="tag ' + (j.menit_terlambat > 0 ? 'warn' : 'ok') + '">' + (j.menit_terlambat > 0 ? 'T ' + j.menit_terlambat + 'm' : 'HADIR') + '</span>';
+    if (j.masuk) ket += ' · masuk ' + esc(j.masuk.replace(':', '.')) + (j.pulang ? ' · pulang ' + esc(j.pulang.replace(':', '.')) : '');
+    else if (j.buka_masuk) ket += ' · dibuka ' + esc(j.buka_masuk.replace(':', '.'));
+    return '<div class="jadwal-row"><div class="ico" style="background:' + (WARNA[j.kode] || '#0b5d3b') + '">' + esc(j.kode) + '</div><div class="t"><b>' + esc(j.nama) + '</b><span>' + ket + '</span></div>' + tag + '</div>';
+  }
+  function renderBeranda() {
+    const r = S.beranda, p = r.profil, t = now();
+    const contoh = /\(CONTOH\)/.test(p.nama);
+    const nama = p.nama.replace(/\s*\(CONTOH\)/, '');
+    const jad = r.jadwal.length ? r.jadwal.map(kartuJadwal).join('') : '<div class="jadwal-row"><div class="ico" style="background:#94a3b8">L</div><div class="t"><b>' + esc(r.libur || 'Tidak ada jadwal') + '</b><span>Presensi tanpa jadwal ditandai LUAR JADWAL</span></div></div>';
+    const notif = (r.notifikasi || []).map(n => '<div class="note ' + (n.status === 'DISETUJUI' ? 'ok' : 'bad') + '"><span class="ni">' + I.bell + '</span><div>Pengajuan <b>' + esc(n.jenis) + '</b> ' + esc(n.tgl) + ': <b>' + esc(n.status) + '</b>' + (n.catatan ? '<br><small style="color:var(--muted)">' + esc(n.catatan) + '</small>' : '') + '</div></div>').join('') +
+      (r.menunggu ? '<div class="note info"><span class="ni">' + I.jam + '</span><div>' + r.menunggu + ' pengajuan Anda <b>menunggu persetujuan</b> admin.</div></div>' : '');
+    const ak = r.akumulasi || {};
+    app.innerHTML = '<div class="view"><div class="hero"><div class="topbar"><img class="logo" src="' + esc(logo()) + '" alt="Logo"><div class="nm"><b>Presensi Dara Juanti</b><small>UPTD Puskesmas · Rawat Inap</small></div><button class="avatar" data-go="profil" aria-label="Profil">' + esc(p.inisial) + '</button></div>' +
+      '<div class="greet"><small>' + salam(t) + '</small><h1>' + esc(nama) + (contoh ? ' <span class="tag contoh">CONTOH</span>' : '') + '</h1><div class="sub">' + esc(p.jabatan) + ' · ' + esc(p.unit) + '</div></div></div>' +
+      '<div class="wrap"><div class="card"><h3>' + I.kal.replace('<svg', '<svg width="16" height="16"') + ' Jadwal hari ini · ' + esc(r.tanggal) + '</h3>' + jad +
+      '<div class="clock"><div><div class="jam" id="jam">' + jamTeks(t) + '<small>:' + pad(wib(t).getUTCSeconds()) + '</small></div><div class="lbl">Waktu server · WIB</div></div><div id="area">' + areaHtml() + '</div></div></div>' +
+      '<div class="aksi">' +
+      '<button class="btn-aksi b-masuk" data-go="scan" data-arg="MASUK"><span class="bi">' + I.masuk + '</span><div><b>MASUK</b><span>Pindai QR name tag</span></div></button>' +
+      '<button class="btn-aksi b-pulang" data-go="scan" data-arg="PULANG"><span class="bi">' + I.pulang + '</span><div><b>PULANG</b><span>Setelah masuk</span></div></button>' +
+      '<button class="btn-aksi b-izin" data-go="ajukan" data-arg="IZIN"><span class="bi">' + I.izin + '</span><div><b>IZIN</b><span>Unggah surat</span></div></button>' +
+      '<button class="btn-aksi b-sakit" data-go="ajukan" data-arg="SAKIT"><span class="bi">' + I.sakit + '</span><div><b>SAKIT</b><span>Unggah bukti</span></div></button>' +
+      '<button class="btn-aksi b-tl" data-go="ajukan" data-arg="TL"><span class="bi">' + I.tl + '</span><div class="tx"><b>TUGAS LAPANGAN (TL)</b><span>Surat tugas · boleh di luar area</span></div></button></div>' + notif +
+      '<div class="card"><h3>Akumulasi ' + BULAN[wib(t).getUTCMonth()] + '</h3><div class="mini-stat"><div><small>Total terlambat</small><b>' + esc(ak.t_teks || '0 menit') + '</b><small>' + (ak.t_kali || 0) + ' kali</small></div><div><small>Total pulang awal</small><b>' + esc(ak.pa_teks || '0 menit') + '</b><small>' + (ak.pa_kali || 0) + ' kali</small></div></div></div>' +
+      '</div></div>' + nav('beranda');
+    S.timers.push(setInterval(() => { const el = $('#jam'); if (el) { const x = now(); el.innerHTML = jamTeks(x) + '<small>:' + pad(wib(x).getUTCSeconds()) + '</small>'; } }, 1000));
+    S.timers.push(setInterval(() => { if (document.visibilityState === 'visible') api('beranda', {}).then(r => { S.beranda = r; S.offset = r.waktu_server - Date.now(); }).catch(() => { }); }, 120000));
+  }
+  // ---------- SCAN QR (MASUK/PULANG) ----------
+  function viewScan(jenis) {
+    if (jenis !== 'MASUK' && jenis !== 'PULANG') jenis = 'MASUK';
+    mulaiGps();
+    const jad = S.beranda && S.beranda.jadwal[0];
+    app.innerHTML = '<div class="view">' + appbar('Presensi ' + jenis) + '<div class="pad">' +
+      '<div class="scan-box"><video id="vid" playsinline muted></video><canvas id="cv" class="hidden"></canvas><div class="scan-frame"><i></i><i></i><i></i><i></i><div class="scan-line"></div></div><div class="scan-hint">Arahkan kamera ke QR di name tag Anda</div><div class="scan-msg hidden" id="scan-msg"></div></div>' +
+      '<div class="card" style="padding:8px 16px">' + chkLokasi() +
+      '<div class="chk ok"><span class="ci">✓</span><b>Perangkat</b><span>Terdaftar</span></div>' +
+      '<div class="chk ' + (jad ? 'ok' : 'wait') + '"><span class="ci">' + (jad ? '✓' : 'i') + '</span><b>Jadwal</b><span>' + (jad ? esc(jad.nama + ' · ' + jad.jam) : 'Luar jadwal / diperiksa server') + '</span></div>' +
+      '<div class="chk wait" id="ck-qr"><span class="ci"><span class="spin d" style="width:14px;height:14px;border-width:2px"></span></span><b>QR name tag</b><span>Memindai…</span></div></div>' +
+      '<p style="font-size:12.5px;color:var(--muted);text-align:center">Pindai QR di <b>name tag milik Anda sendiri</b>. QR pegawai lain ditolak & dicatat. QR hanya berlaku dari HP ini dan di area Puskesmas' + (S.info && S.info.pin_wajib === false ? '' : '; setelah terbaca, masukkan PIN') + '.</p></div></div>';
+    Scanner.mulai($('#vid'), $('#cv'), teks => prosesQr(jenis, teks), msg => { const m = $('#scan-msg'); m.textContent = msg; m.classList.remove('hidden'); });
+  }
+  async function prosesQr(jenis, teks) {
+    const ck = $('#ck-qr'); if (ck) ck.outerHTML = '<div class="chk ok" id="ck-qr"><span class="ci">✓</span><b>QR name tag</b><span>Terbaca · memeriksa…</span></div>';
+    let pos;
+    try { pos = await posisiSegar(); } catch (e) { return hasilGagal(jenis, e.message); }
+    const base = { jenis, qr: teks, lat: pos.lat, lng: pos.lng, akurasi: pos.akurasi };
+    let cek;
+    try { cek = await api('presensi.cek', base, { ulang: 1 }); } catch (e) { return e.kode === 'SESI' || e.kode === 'NONAKTIF' ? null : hasilGagal(jenis, e.message); }
+    let alasan = '';
+    if (cek.perlu_konfirmasi) { const k = await sheetPulangAwal(cek); if (!k) return go('beranda'); alasan = k.alasan; }
+    const data = Object.assign({}, base, { konfirmasi_pulang_awal: !!cek.perlu_konfirmasi, alasan, request_id: rid() });
+    if (cek.swafoto_wajib) { const f = await sheetSwafoto(); if (!f) return go('beranda'); data.swafoto = { b64: f }; }
+    simpanDenganPin(data, jenis);
+  }
+  async function simpanDenganPin(data, jenis) {
+    const pakaiPin = !S.info || S.info.pin_wajib !== false;
+    while (true) {
+      if (pakaiPin) { const pin = await sheetPin('Masukkan PIN', 'Konfirmasi presensi ' + jenis); if (pin === null) return go('beranda'); data.pin = pin; }
+      try { const r = await api('presensi.simpan', data); S.terakhir = r; S.beranda = null; return viewHasil(r); }
+      catch (e) { if (e.kode === 'PIN') { toast(e.message, 'bad'); continue; } if (e.kode === 'SESI' || e.kode === 'NONAKTIF') return; return hasilGagal(jenis, e.message); }
+    }
+  }
+  function statusInfo(r) {
+    if (r.status === 'TEPAT_WAKTU') return { k: 'ok', t: 'TEPAT WAKTU', s: 'Jadwal masuk ' + (r.jadwal || '').split('–')[0].replace(':', '.') + ' · toleransi ' + r.toleransi + ' menit' };
+    if (r.status === 'TERLAMBAT') return { k: 'warn', t: 'TERLAMBAT ' + menitTeks(r.menit_terlambat).toUpperCase(), s: 'Jadwal masuk ' + (r.jadwal || '').split('–')[0].replace(':', '.') + ' · toleransi ' + r.toleransi + ' menit' };
+    if (r.status === 'PULANG_AWAL') return { k: 'bad', t: 'PULANG AWAL ' + menitTeks(r.menit_pulang_awal).toUpperCase(), s: 'Jadwal pulang ' + (r.jadwal || '').split('–')[1] };
+    if (r.status === 'NORMAL') return { k: 'ok', t: 'PULANG NORMAL', s: 'Jadwal pulang ' + (r.jadwal || '').split('–')[1] };
+    return { k: 'info', t: 'LUAR JADWAL', s: 'Tidak ada jadwal dinas — diverifikasi admin' };
+  }
+  function viewHasil(r) {
+    const st = statusInfo(r), ak = r.akumulasi || {};
+    app.innerHTML = '<div class="view"><div class="hasil ' + (st.k === 'bad' ? 'warn' : st.k === 'warn' ? 'warn' : 'ok') + '"><div class="big">' + (st.k === 'ok' || st.k === 'info' ? I.ok : I.jam) + '</div><h2>Presensi ' + esc(r.jenis) + ' tercatat</h2><div class="waktu">' + esc(String(r.waktu).replace(':', '.')) + '</div><div class="tgl">' + esc(r.tanggal) + ' · WIB (server)</div>' +
+      '<div class="status-band ' + st.k + '">' + esc(st.t) + '<small>' + esc(st.s) + '</small></div></div>' +
+      '<div class="pad"><div class="card dl"><div><span>Shift</span><b>' + esc(r.shift) + ' · ' + esc(r.jadwal) + '</b></div><div><span>Tanggal dinas</span><b>' + esc(r.tanggal_dinas.split('-').reverse().join('-')) + '</b></div><div><span>QR name tag / jarak</span><b>v' + esc(r.qr_versi) + ' ✓ · ' + jarakTeks(r.jarak) + '</b></div><div><span>ID transaksi</span><b>' + esc(r.id_presensi) + '</b></div></div>' +
+      (ak.t_kali || ak.pa_kali ? '<div class="note info"><span class="ni">' + I.jam + '</span><div>Akumulasi ' + BULAN[wib(now()).getUTCMonth()] + ': terlambat <b>' + esc(ak.t_teks) + '</b> (' + ak.t_kali + ' kali)' + (ak.pa_kali ? ', pulang awal <b>' + esc(ak.pa_teks) + '</b>' : '') + '</div></div>' : '') +
+      (st.k === 'warn' || st.k === 'bad' ? '<button class="btn sec" data-go="ajukan" data-arg="IZIN" style="margin-bottom:10px">Ajukan keterangan (izin)</button>' : '') +
+      '<button class="btn pri" data-go="beranda">Selesai</button></div></div>' + nav('beranda');
+  }
+  function viewHasilTerakhir() { if (S.terakhir) viewHasil(S.terakhir); else go('beranda'); }
+  function hasilGagal(jenis, pesan) {
+    app.innerHTML = '<div class="view"><div class="hasil bad"><div class="big">' + I.x + '</div><h2>Presensi ' + esc(jenis) + ' belum berhasil</h2><p class="tgl" style="margin-top:6px">' + esc(jamTeks(now(), true)) + ' WIB (server)</p>' +
+      '<div class="status-band bad" style="font-size:15px;line-height:1.4">' + esc(pesan) + '</div></div><div class="pad"><button class="btn pri" data-go="scan" data-arg="' + jenis + '" style="margin-bottom:10px">Coba lagi</button><button class="btn sec" data-go="beranda">Kembali ke beranda</button>' +
+      '<p style="font-size:12.5px;color:var(--muted);text-align:center;margin-top:14px">Percobaan yang gagal tercatat. Bila ada kendala, hubungi admin untuk koreksi.</p></div></div>' + nav('beranda');
+  }
+  // ---------- AJUKAN IZIN/SAKIT/TL ----------
+  function viewAjukan(jenis) {
+    if (['IZIN', 'SAKIT', 'TL'].indexOf(jenis) < 0) jenis = 'IZIN';
+    mulaiGps();
+    const t = wib(now()), hari = t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate());
+    const lbl = { IZIN: 'Surat/keterangan izin', SAKIT: 'Bukti (surat keterangan sakit)', TL: 'Surat tugas' }[jenis];
+    const ph = { IZIN: 'Mis. keperluan keluarga mendesak…', SAKIT: 'Mis. demam, istirahat sesuai anjuran dokter…', TL: 'Lokasi & kegiatan tugas lapangan…' }[jenis];
+    app.innerHTML = '<div class="view">' + appbar('Pengajuan Ketidakhadiran') + '<form class="pad" id="f-aj">' +
+      '<div class="seg">' + ['IZIN', 'SAKIT', 'TL'].map(j => '<button type="button" data-go="ajukan" data-arg="' + j + '" class="' + (j === jenis ? 'on' : '') + '">' + (j === 'TL' ? 'TL' : j.charAt(0) + j.slice(1).toLowerCase()) + '</button>').join('') + '</div>' +
+      '<div class="card"><div class="row2"><label class="f"><span>Tanggal mulai</span><input class="inp" type="date" name="m" value="' + hari + '" required></label><label class="f"><span>Tanggal selesai</span><input class="inp" type="date" name="s" value="' + hari + '" required></label></div>' +
+      '<label class="f"><span>Keterangan</span><textarea class="inp" name="k" maxlength="500" required placeholder="' + ph + '"></textarea></label>' +
+      '<label class="f" style="margin:0"><span>' + lbl + ' · wajib</span></label><div class="upload"><div id="file-chip"></div><div class="row2"><label class="btn sec" style="min-height:46px;font-size:14px">' + I.cam + ' Kamera<input type="file" accept="image/*" capture="environment" class="hidden" id="in-cam"></label><label class="btn sec" style="min-height:46px;font-size:14px">' + I.file + ' Galeri/PDF<input type="file" accept="image/jpeg,image/png,application/pdf" class="hidden" id="in-file"></label></div><p style="font-size:12px;color:var(--muted);margin:8px 0 0">JPG/PNG/PDF, maks. ' + Math.round(((S.info && S.info.bukti_maks_kb) || 2048) / 1024) + ' MB. Foto dikompres otomatis.</p></div></div>' +
+      '<div class="card" style="padding:8px 16px"><div id="gps-aj">' + gpsAjukan() + '</div><div class="chk ok"><span class="ci">✓</span><b>HP terdaftar</b><span>waktu server ' + jamTeks(now()) + ' WIB</span></div></div>' +
+      '<button class="btn pri" id="b-aj">Kirim Pengajuan</button><p style="font-size:12.5px;color:var(--muted);text-align:center">Pengajuan berlaku setelah disetujui admin. Batas pengajuan H+1.</p></form></div>' + nav('beranda');
+    let bukti = null;
+    const pilih = async (f) => {
+      if (!f) return;
+      const maks = ((S.info && S.info.bukti_maks_kb) || 2048) * 1024;
+      try {
+        if (f.type === 'application/pdf') { if (f.size > maks) throw new Error('PDF melebihi batas ukuran.'); bukti = { b64: await bacaB64(f), mime: 'application/pdf', nama: f.name.replace(/\.pdf$/i, ''), size: f.size }; }
+        else if (/^image\//.test(f.type)) { bukti = await kompres(f, maks); bukti.nama = (f.name || 'foto').replace(/\.\w+$/, ''); }
+        else throw new Error('Jenis berkas harus JPG, PNG, atau PDF.');
+        $('#file-chip').innerHTML = '<div class="file">' + (bukti.mime === 'application/pdf' ? '<div class="pdf">PDF</div>' : '<img src="' + bukti.b64 + '" alt="">') + '<div class="fi"><b>' + esc(bukti.nama) + (bukti.mime === 'application/pdf' ? '.pdf' : '.jpg') + '</b>' + Math.round(bukti.size / 1024) + ' KB' + (bukti.mime === 'image/jpeg' ? ' · dikompres otomatis' : '') + '</div></div>';
+      } catch (e) { toast(e.message, 'bad'); }
+    };
+    $('#in-cam').onchange = e => pilih(e.target.files[0]); $('#in-file').onchange = e => pilih(e.target.files[0]);
+    S.timers.push(setInterval(() => { const g = $('#gps-aj'); if (g) g.innerHTML = gpsAjukan(); }, 3000));
+    $('#f-aj').onsubmit = async e => {
+      e.preventDefault(); const f = e.target, b = $('#b-aj');
+      if (!bukti) return toast('Bukti/surat wajib diunggah.', 'bad');
+      if (f.s.value < f.m.value) return toast('Tanggal selesai sebelum tanggal mulai.', 'bad');
+      let pos; try { pos = await posisiSegar(); } catch (er) { return toast(er.message, 'bad', 5000); }
+      const data = { jenis, tgl_mulai: f.m.value, tgl_selesai: f.s.value, keterangan: f.k.value, bukti: { b64: bukti.b64, mime: bukti.mime, nama: bukti.nama }, lat: pos.lat, lng: pos.lng, akurasi: pos.akurasi, request_id: rid() };
+      while (true) {
+        const pin = (!S.info || S.info.pin_wajib !== false) ? await sheetPin('Masukkan PIN', 'Kirim pengajuan ' + jenis) : '';
+        if (pin === null) return;
+        data.pin = pin; b.disabled = true; b.innerHTML = '<span class="spin"></span> Mengirim…';
+        try {
+          const r = await api('ajukan', data, { timeout: 60000 });
+          S.beranda = null;
+          app.innerHTML = '<div class="view"><div class="hasil ok"><div class="big">' + I.ok + '</div><h2>Pengajuan ' + esc(jenis) + ' terkirim</h2><div class="tgl" style="margin-top:6px">' + esc(f.m.value) + (f.s.value !== f.m.value ? ' s.d. ' + esc(f.s.value) : '') + ' · ' + esc(r.waktu_server) + ' WIB</div><div class="status-band info">MENUNGGU PERSETUJUAN<small>Lokasi tercatat ' + jarakTeks(r.jarak) + ' dari Puskesmas' + (r.dalam_area ? '' : ' (di luar area — diizinkan)') + '</small></div></div><div class="pad"><div class="card dl"><div><span>ID pengajuan</span><b>' + esc(r.id_pengajuan) + '</b></div><div><span>Bukti</span><b>' + esc(bukti.nama) + '</b></div></div><button class="btn pri" data-go="beranda">Selesai</button></div></div>' + nav('beranda');
+          return;
+        } catch (er) { b.disabled = false; b.textContent = 'Kirim Pengajuan'; if (er.kode === 'PIN') { toast(er.message, 'bad'); continue; } if (er.kode !== 'SESI') toast(er.message, 'bad', 6000); return; }
+      }
+    };
+  }
+  function gpsAjukan() {
+    if (!S.gps) return '<div class="chk wait"><span class="ci">…</span><b>GPS</b><span>' + esc(S.gpsErr || 'mencari lokasi…') + '</span></div>';
+    const j = jarakKe(S.gps.lat, S.gps.lng);
+    return '<div class="chk ok"><span class="ci">✓</span><b>GPS tercatat</b><span>' + (j ? jarakTeks(j.jarak) + ' dari Puskesmas · ' + (j.dalam ? 'dalam area' : 'di luar area (boleh)') : '') + '</span></div>';
+  }
+  function bacaB64(f) { return new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(f); }); }
+  async function kompres(f, maks) {
+    const url = URL.createObjectURL(f); const img = new Image(); img.src = url; await img.decode(); URL.revokeObjectURL(url);
+    let w = img.naturalWidth, h = img.naturalHeight, sc = Math.min(1, 1600 / Math.max(w, h)), q = 0.8, out;
+    const cv = document.createElement('canvas');
+    for (let i = 0; i < 6; i++) {
+      cv.width = Math.round(w * sc); cv.height = Math.round(h * sc); cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      out = cv.toDataURL('image/jpeg', q); const size = Math.round((out.length - 23) * 0.75);
+      if (size <= Math.min(maks, 900 * 1024)) return { b64: out, mime: 'image/jpeg', size };
+      sc *= 0.8; q = Math.max(0.5, q - 0.08);
+    }
+    throw new Error('Foto terlalu besar meski sudah dikompres.');
+  }
+  // ---------- JADWAL ----------
+  async function viewJadwal(bulanArg) {
+    const t = wib(now()), bulan = bulanArg || S.blnJadwal || (t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1));
+    S.blnJadwal = bulan;
+    app.innerHTML = '<div class="view">' + appbarBulan('Jadwal Saya', bulan, 'jadwal') + '<div class="pad" id="isi"><div class="loading"><span class="spin d"></span></div></div></div>' + nav('jadwal');
+    pasangBulan(viewJadwal);
+    try {
+      const r = await api('jadwal', { bulan });
+      const hariIni = t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate());
+      $('#isi').innerHTML = (r.terbit ? '' : '<div class="note info"><span class="ni">' + I.kal + '</span><div>Jadwal shift bulan ini <b>belum dipublikasikan</b> admin.</div></div>') +
+        r.hari.map(h => '<div class="list-item ' + (h.tanggal === hariIni ? 'today' : '') + '"><div class="d"><b>' + (+h.tanggal.slice(8)) + '</b><small>' + esc(h.hari.slice(0, 3)) + '</small></div><div class="m">' +
+          (h.shift.length ? h.shift.map(s => '<b>' + esc(s.nama) + '</b><span>' + esc(s.jam) + '</span>').join('<br>') : '<b style="color:var(--muted)">' + esc(h.raw === 'C' ? 'Cuti' : h.ket || (h.raw === 'L' || h.raw === 'LN' ? 'Libur' : '—')) + '</b>') + '</div>' +
+          (h.shift.length ? h.shift.map(s => '<span class="kode" style="background:' + (WARNA[s.kode] || '#0b5d3b') + '">' + esc(s.kode) + '</span>').join('') : '<span class="kode" style="background:' + (h.raw === 'C' ? WARNA.C : '#cbd5e1') + '">' + esc(h.raw === 'C' ? 'C' : 'L') + '</span>') + '</div>').join('');
+      const el = document.querySelector('.list-item.today'); if (el) el.scrollIntoView({ block: 'center' });
+    } catch (e) { $('#isi').innerHTML = '<p>' + esc(e.message) + '</p>'; }
+  }
+  function appbarBulan(judul, bulan, k) { const [y, m] = bulan.split('-').map(Number); return '<div class="appbar"><h2 style="padding-left:6px">' + judul + '</h2><button class="icon-btn" id="b-prev" aria-label="Bulan sebelumnya">' + I.back + '</button><b style="min-width:112px;text-align:center;font-size:14px">' + BULAN[m - 1] + ' ' + y + '</b><button class="icon-btn" id="b-next" aria-label="Bulan berikutnya" style="transform:rotate(180deg)">' + I.back + '</button></div>'; }
+  function pasangBulan(fn) {
+    const geser = n => { const b = (fn === viewJadwal ? S.blnJadwal : S.blnRiwayat).split('-').map(Number); const d = new Date(Date.UTC(b[0], b[1] - 1 + n, 1)); fn(d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1)); };
+    $('#b-prev').onclick = () => geser(-1); $('#b-next').onclick = () => geser(1);
+  }
+  // ---------- RIWAYAT ----------
+  async function viewRiwayat(bulanArg) {
+    const t = wib(now()), bulan = bulanArg || S.blnRiwayat || (t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1));
+    S.blnRiwayat = bulan;
+    app.innerHTML = '<div class="view">' + appbarBulan('Riwayat', bulan, 'riwayat') + '<div class="pad" id="isi"><div class="loading"><span class="spin d"></span></div></div></div>' + nav('riwayat');
+    pasangBulan(viewRiwayat);
+    try {
+      const r = await api('riwayat', { bulan });
+      const kodeTag = h => { const k = h.kode; const c = /T|PA|TPP/.test(k) ? (/PA|TPP/.test(k) ? 'bad' : 'warn') : k === 'H' ? 'ok' : /^(I|S|TL)$/.test(k) ? 'info' : k === 'TK' ? 'bad' : 'mut'; return '<span class="tag ' + c + '">' + esc(k === 'BELUM' ? 'BELUM' : k) + (h.mt ? ' ' + h.mt + 'm' : h.pa ? ' ' + h.pa + 'm' : '') + '</span>'; };
+      $('#isi').innerHTML = '<div class="mini-stat" style="margin-bottom:12px"><div style="background:#fff;box-shadow:var(--sh)"><small>Total terlambat</small><b>' + esc(r.total.t_teks) + '</b><small>' + r.total.t_kali + ' kali</small></div><div style="background:#fff;box-shadow:var(--sh)"><small>Total pulang awal</small><b>' + esc(r.total.pa_teks) + '</b><small>' + r.total.pa_kali + ' kali</small></div></div>' +
+        (r.hari.length ? r.hari.map(h => '<div class="list-item"><div class="d"><b>' + (+h.tanggal.slice(8)) + '</b><small>' + esc(h.hari) + '</small></div><div class="m"><b>' + esc(h.shift || '-') + '</b><span>' + (h.masuk ? esc(h.masuk.replace(':', '.')) + '–' + esc((h.pulang || '…').replace(':', '.')) : esc(h.ket || '')) + '</span></div>' + kodeTag(h) + '</div>').join('') : '<p style="color:var(--muted);text-align:center">Belum ada riwayat bulan ini.</p>') +
+        '<div class="sec-title">Pengajuan saya</div>' + (r.pengajuan.length ? r.pengajuan.map(p => '<div class="list-item"><div class="m"><b>' + esc(p.jenis) + ' · ' + esc(p.tgl) + '</b>' + (p.catatan ? '<span>' + esc(p.catatan) + '</span>' : '') + '</div><span class="tag ' + (p.status === 'DISETUJUI' ? 'ok' : p.status === 'DITOLAK' ? 'bad' : 'warn') + '">' + esc(p.status) + '</span></div>').join('') : '<p style="color:var(--muted)">Belum ada pengajuan.</p>') +
+        '<p style="font-size:12px;color:var(--muted)">H hadir · T terlambat · PA pulang awal · TPP tidak presensi pulang · I/S/TL disetujui · TK tanpa keterangan</p>';
+    } catch (e) { $('#isi').innerHTML = '<p>' + esc(e.message) + '</p>'; }
+  }
+  // ---------- PROFIL ----------
+  async function viewProfil() {
+    app.innerHTML = '<div class="view">' + appbar('Profil') + '<div class="pad" id="isi"><div class="loading"><span class="spin d"></span></div></div></div>' + nav('profil');
+    try {
+      const p = await api('profil', {});
+      $('#isi').innerHTML = '<div class="card" style="text-align:center"><div class="avatar" style="width:86px;height:86px;margin:4px auto 10px;background:var(--hijauL);color:var(--hijau);border-color:var(--hijauL);font-size:28px">' + (p.foto ? '<img src="' + esc(p.foto) + '" alt="">' : esc(p.inisial)) + '</div><b style="font-size:18px">' + esc(p.nama) + '</b><div style="color:var(--muted);font-size:14px">' + esc(p.jabatan) + ' · ' + esc(p.unit) + '</div><div style="margin-top:8px"><span class="tag ok">' + esc(p.kategori_label) + '</span> <span class="tag mut">' + esc(p.grup_jadwal) + '</span></div></div>' +
+        '<div class="card dl"><div><span>NIP/NIK</span><b>' + esc(p.nip) + '</b></div><div><span>Golongan</span><b>' + esc(p.golongan || '—') + '</b></div><div><span>Perangkat terdaftar</span><b>' + esc(p.perangkat ? p.perangkat.label : '-') + '</b></div><div><span>Terdaftar sejak</span><b>' + esc(p.perangkat ? p.perangkat.sejak : '-') + '</b></div></div>' +
+        '<button class="btn sec" id="b-sandi" style="margin-bottom:10px">Ganti kata sandi</button><button class="btn sec" id="b-pin" style="margin-bottom:10px">Ganti PIN</button>' +
+        (S.installEvt ? '<button class="btn sec" id="b-pasang" style="margin-bottom:10px">Pasang di layar utama</button>' : '') +
+        '<button class="btn sec" id="b-priv" style="margin-bottom:10px">Pemberitahuan privasi</button><button class="btn bad" id="b-out">Keluar</button>' +
+        '<p style="font-size:12px;color:var(--muted);text-align:center;margin-top:14px">Ganti HP? Minta admin mereset perangkat. Menghapus data browser juga memerlukan pendaftaran ulang perangkat.<br>v' + esc(C.VERSI) + '</p>';
+      $('#b-priv').onclick = sheetPrivasi;
+      $('#b-out').onclick = async () => { try { await api('logout', {}); } catch (e) { } keluarLokal(); go('login'); };
+      if ($('#b-pasang')) $('#b-pasang').onclick = () => { S.installEvt.prompt(); S.installEvt = null; };
+      $('#b-sandi').onclick = () => sheetForm('Ganti kata sandi', [['lama', 'Kata sandi lama', 'password'], ['baru', 'Kata sandi baru (min. 8, huruf+angka)', 'password'], ['ulang', 'Ulangi kata sandi baru', 'password']], async v => {
+        if (v.baru !== v.ulang) throw new Error('Ulangan tidak sama.'); const r = await api('gantiSandi', { lama: v.lama, baru: v.baru }); S.token = r.token; LS.set('dj_token', r.token); toast('Kata sandi diganti.', 'ok'); });
+      $('#b-pin').onclick = () => sheetForm('Ganti PIN', [['lama', 'PIN lama', 'password', 'numeric'], ['baru', 'PIN baru (6 digit)', 'password', 'numeric'], ['ulang', 'Ulangi PIN baru', 'password', 'numeric']], async v => {
+        if (v.baru !== v.ulang) throw new Error('Ulangan tidak sama.'); await api('gantiPin', { lama: v.lama, baru: v.baru }); toast('PIN diganti.', 'ok'); });
+    } catch (e) { $('#isi').innerHTML = '<p>' + esc(e.message) + '</p>'; }
+  }
+  function viewTerkunci(pesan) {
+    clearTimers();
+    app.innerHTML = '<div class="lock"><div class="li">' + I.lock + '</div><h2>Akun tidak aktif</h2><p>' + esc(pesan || 'Akun Anda dinonaktifkan. Presensi tidak dapat dilakukan.') + '</p><p style="font-size:13px">Hubungi bagian kepegawaian bila ini keliru.</p><span class="tag bad" style="margin-top:14px">PERANGKAT TERKUNCI</span><button class="btn sec" style="max-width:220px;margin-top:22px" onclick="location.hash=\'#/login\';location.reload()">Kembali</button></div>';
+  }
+  // ---------- sheet (modal bawah) ----------
+  let sheetEl = null;
+  function closeSheet() { if (sheetEl) { sheetEl.remove(); sheetEl = null; } }
+  function openSheet(html) { closeSheet(); sheetEl = document.createElement('div'); sheetEl.className = 'sheet-bg'; sheetEl.innerHTML = '<div class="sheet"><div class="grab"></div>' + html + '</div>'; document.body.appendChild(sheetEl); return sheetEl; }
+  function sheetInfo(judul, isi) { const el = openSheet('<h3>' + esc(judul) + '</h3><p>' + esc(isi) + '</p><button class="btn pri" id="s-ok">Mengerti</button>'); $('#s-ok', el).onclick = closeSheet; }
+  function sheetPin(judul, sub) {
+    return new Promise(res => {
+      let pin = '';
+      const el = openSheet('<h3 style="text-align:center">' + esc(judul) + '</h3><p style="text-align:center">' + esc(sub) + '</p><div class="dots" id="dots">' + '<i></i>'.repeat(6) + '</div><div class="keypad">' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => '<button data-k="' + n + '">' + n + '</button>').join('') + '<button data-k="x" style="font-size:15px">Batal</button><button data-k="0">0</button><button data-k="del" style="font-size:16px">⌫</button></div>');
+      const upd = () => el.querySelectorAll('#dots i').forEach((d, i) => d.classList.toggle('on', i < pin.length));
+      el.addEventListener('click', e => {
+        const b = e.target.closest('[data-k]'); if (!b) { if (e.target === el) { closeSheet(); res(null); } return; }
+        const k = b.dataset.k;
+        if (k === 'x') { closeSheet(); return res(null); }
+        if (k === 'del') pin = pin.slice(0, -1); else if (pin.length < 6) pin += k;
+        upd(); if (pin.length === 6) setTimeout(() => { closeSheet(); res(pin); }, 120);
+      });
+    });
+  }
+  function sheetPulangAwal(c) {
+    return new Promise(res => {
+      const jp = (c.jadwal || '').split('–')[1] || '';
+      const el = openSheet('<div style="display:flex;gap:12px;align-items:center;margin-bottom:8px"><span class="ni" style="width:46px;height:46px;border-radius:14px;background:var(--kuningL);color:#b07800;display:grid;place-items:center">' + I.jam + '</span><div><h3>Belum waktunya pulang</h3></div></div>' +
+        '<p>Jam pulang jadwal Anda <b>' + esc(jp.replace(':', '.')) + '</b>. Bila melanjutkan sekarang (' + jamTeks(now()) + '), presensi tercatat:</p><div class="status-band bad" style="text-align:center">PULANG AWAL ' + esc(menitTeks(c.menit_pulang_awal).toUpperCase()) + '</div>' +
+        '<label class="f" style="margin-top:12px"><span>Alasan (opsional)</span><input class="inp" id="pa-al" maxlength="200" placeholder="Mis. mengantar rujukan pasien"></label><p style="font-size:12.5px">Jika ada izin resmi, ajukan IZIN agar admin dapat memverifikasi.</p><div class="row2"><button class="btn sec" id="pa-no">Batal</button><button class="btn bad" id="pa-ok">Tetap pulang</button></div>');
+      $('#pa-no', el).onclick = () => { closeSheet(); res(null); };
+      $('#pa-ok', el).onclick = () => { const a = $('#pa-al', el).value; closeSheet(); res({ alasan: a }); };
+    });
+  }
+  /** Swafoto (opsional, hanya bila Pengaturan swafoto_wajib = TRUE): kamera depan, dikompres JPEG ±480 px. */
+  function sheetSwafoto() {
+    return new Promise(res => {
+      let stream = null;
+      const el = openSheet('<h3 style="text-align:center">Swafoto presensi</h3><p style="text-align:center">Diwajibkan Puskesmas. Pastikan wajah terlihat jelas.</p><div class="scan-box" style="aspect-ratio:3/4;max-height:52vh"><video id="sv" playsinline muted style="transform:scaleX(-1)"></video><canvas id="sc" class="hidden"></canvas></div><div class="row2" style="margin-top:12px"><button class="btn sec" id="sf-no">Batal</button><button class="btn pri" id="sf-ok" disabled>Ambil foto</button></div>');
+      const stop = () => { if (stream) stream.getTracks().forEach(t => t.stop()); };
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 } }, audio: false }).then(st => { stream = st; const v = $('#sv', el); v.srcObject = st; v.play().catch(() => {}); $('#sf-ok', el).disabled = false; }).catch(e => { toast('Kamera depan tidak dapat dibuka (' + e.name + ').', 'bad'); });
+      $('#sf-no', el).onclick = () => { stop(); closeSheet(); res(null); };
+      $('#sf-ok', el).onclick = () => { const v = $('#sv', el), c = $('#sc', el), w = 480, h = Math.round(480 * (v.videoHeight || 640) / (v.videoWidth || 480)); c.width = w; c.height = h; c.getContext('2d').drawImage(v, 0, 0, w, h); const d = c.toDataURL('image/jpeg', 0.8); stop(); closeSheet(); res(d); };
+    });
+  }
+  function sheetForm(judul, fields, onSubmit) {
+    const el = openSheet('<h3>' + esc(judul) + '</h3><form id="sf">' + fields.map(f => '<label class="f"><span>' + esc(f[1]) + '</span><input class="inp" name="' + f[0] + '" type="' + f[2] + '"' + (f[3] ? ' inputmode="numeric" maxlength="6"' : ' maxlength="64"') + ' required></label>').join('') + '<div class="row2"><button type="button" class="btn sec" id="sf-x">Batal</button><button class="btn pri" id="sf-ok">Simpan</button></div></form>');
+    $('#sf-x', el).onclick = closeSheet;
+    $('#sf', el).onsubmit = async e => { e.preventDefault(); const v = {}; fields.forEach(f => v[f[0]] = e.target[f[0]].value); const b = $('#sf-ok', el); b.disabled = true; try { await onSubmit(v); closeSheet(); } catch (er) { b.disabled = false; toast(er.message, 'bad'); } };
+  }
+  function sheetPrivasi() {
+    const el = openSheet('<h3>Pemberitahuan Privasi</h3><div style="font-size:14px;color:var(--ink)"><p style="color:var(--ink)">Sesuai UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi, aplikasi ini memproses:</p><ul style="padding-left:18px;margin:0 0 10px"><li><b>Identitas kepegawaian</b> (nama, NIP/NIK, jabatan, unit, kategori).</li><li><b>Lokasi GPS</b> & akurasinya <b>hanya saat</b> Anda menekan presensi/pengajuan (bukan pelacakan terus-menerus di server).</li><li><b>ID perangkat</b> yang disimpan dalam bentuk hash untuk kunci 1 HP.</li><li><b>Bukti</b> izin/sakit/tugas yang Anda unggah.</li><li>Waktu server setiap transaksi & log keamanan.</li></ul><p style="color:var(--ink)"><b>Tujuan:</b> presensi & administrasi kepegawaian Puskesmas. Data disimpan di akun Google institusi, tidak dibagikan publik, dan hanya dapat diakses admin berwenang. Anda berhak meminta akses/koreksi data melalui bagian kepegawaian.</p></div><button class="btn pri" id="s-ok">Tutup</button>');
+    $('#s-ok', el).onclick = closeSheet;
+  }
+  // ---------- mulai ----------
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.installEvt = e; });
+  window.addEventListener('offline', () => toast('Koneksi terputus. Presensi memerlukan internet.', 'bad', 4000));
+  async function init() {
+    S.device = deviceId();
+    try { const c = LS.get('dj_info'); if (c) S.info = JSON.parse(c); } catch (e) { }
+    try { const inf = await API.kirim('info', {}, null, { ulang: 1, timeout: 15000 }); S.info = inf; S.offset = inf.waktu_server - Date.now(); LS.set('dj_info', JSON.stringify(inf)); } catch (e) { }
+    const sp = $('#splash'); if (sp) { sp.style.transition = 'opacity .35s'; sp.style.opacity = '0'; setTimeout(() => sp.remove(), 380); }
+    if (S.token) { mulaiGps(); if (!location.hash || location.hash === '#/' || location.hash === '#/login') location.hash = '#/beranda'; else route(); }
+    else { if (location.hash !== '#/login') location.hash = '#/login'; else route(); }
+    if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
+  }
+  init();
+})();
