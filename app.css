@@ -167,3 +167,31 @@ textarea.inp{min-height:92px;resize:vertical}
 .splash img{width:96px;height:96px;background:#fff;border-radius:26px;padding:12px;animation:pop .6s}
 .offline{background:#7a5a00;color:#fff;text-align:center;font-size:12.5px;padding:6px}
 @media (min-width:481px){body{background:#dfe6ee}#app{box-shadow:0 0 40px rgba(0,0,0,.08)}}
+/* ---------- TAHAP 3: dokumen bersyarat & tukar shift ---------- */
+.bukti-info{font-size:13px;border-radius:12px;padding:9px 12px;margin:0 0 10px;background:#f3f6f9;color:var(--muted);display:flex;gap:8px;align-items:flex-start}
+.bukti-info:empty{display:none}
+.bukti-info.bebas{background:var(--hijauL);color:var(--hijau)}.bukti-info.wajib{background:var(--kuningL);color:#7a5200}
+.b-tukar{grid-column:1/-1;min-height:74px;flex-direction:row;align-items:center;gap:14px;background:linear-gradient(135deg,#6d4fd8,#3b2a8f)}
+.b-tukar b{margin:0;font-size:17px}.b-tukar .tx{flex:1}.b-tukar .bi{font-size:22px;font-weight:900}
+.b-tukar .bdg{position:absolute;top:10px;right:12px;background:#ff4d4f;color:#fff;font-style:normal;font-weight:800;font-size:12px;border-radius:999px;min-width:22px;height:22px;display:grid;place-items:center;padding:0 6px;z-index:1}
+.note.tk-note{width:100%;text-align:left;border:0;cursor:pointer;outline:2px solid #c9bdf5;background:#f6f3ff}
+.note.tk-note .ni,.note .ni{font-weight:900}.note.tk-note .ni{background:var(--unguL);color:var(--ungu)}
+.note.tk-note .tk-go{margin-left:auto;align-self:center;color:var(--ungu);font-weight:800;white-space:nowrap}
+.tk-card .tk-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px}
+.tk-card .tk-head b{display:block;font-size:15px}.tk-card .tk-head small{color:var(--muted);font-size:12px}
+.tk-lbl{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px}
+.tk-swap>div{display:flex;align-items:center;gap:8px;background:#f6f8fa;border-radius:12px;padding:8px 10px;margin-bottom:6px;font-size:13px}
+.tk-swap small{min-width:76px;color:var(--muted);font-weight:600}.tk-swap i{font-style:normal;color:var(--muted);font-weight:800}.tk-swap span:not(.kd){color:var(--muted);font-size:12px;flex:1;min-width:0}
+.kd{display:inline-grid;place-items:center;min-width:28px;height:26px;padding:0 6px;border-radius:8px;color:#fff;font-weight:800;font-size:12.5px;flex:none}
+.tk-al{font-size:13.5px;margin:6px 0 4px}.tk-exp{font-size:12px;color:#8a5d00;display:flex;gap:6px;align-items:center;margin:4px 0 10px}
+.tk-card .row2 .btn,.tk-card .btn{min-height:44px;font-size:15px}
+.tk-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto}
+.tk-opt{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1.5px solid var(--line);border-radius:12px;background:#fff}
+.tk-opt.on{border-color:var(--ungu);background:#f6f3ff}.tk-opt input{accent-color:var(--ungu)}
+.tk-opt div{flex:1;min-width:0}.tk-opt b{display:block;font-size:14px}.tk-opt small{color:var(--muted);font-size:12px}
+.chkline{display:flex;gap:8px;align-items:center;font-size:14px;margin:4px 0 8px}
+.tk-mark{display:block;font-size:11.5px;color:var(--ungu);font-weight:700;margin-top:2px}
+.kosong{color:var(--muted);font-size:13.5px;text-align:center;margin:6px 0 10px}
+.memuat{opacity:.5;pointer-events:none}
+.toast{pointer-events:none}
+.row2>*{min-width:0}.row2 .inp{min-width:0;width:100%}input[type=date].inp{min-width:0;max-width:100%}

@@ -101,7 +101,7 @@
     clearTimers(); closeSheet();
     const [v, arg] = location.hash.replace(/^#\//, '').split('/');
     if (!S.token && v !== 'login') return viewLogin();
-    ({ login: viewLogin, aktivasi: viewAktivasi, beranda: viewBeranda, scan: () => viewScan(arg || 'MASUK'), ajukan: () => viewAjukan(arg || 'IZIN'), jadwal: viewJadwal, riwayat: viewRiwayat, profil: viewProfil, hasil: viewHasilTerakhir }[v] || viewBeranda)();
+    ({ login: viewLogin, aktivasi: viewAktivasi, beranda: viewBeranda, scan: () => viewScan(arg || 'MASUK'), ajukan: () => viewAjukan(arg || 'IZIN'), jadwal: () => viewJadwal(), tukar: () => (arg === 'baru' ? viewTukarBaru() : viewTukar()), riwayat: () => viewRiwayat(), profil: viewProfil, hasil: viewHasilTerakhir }[v] || viewBeranda)();
     window.scrollTo(0, 0);
   }
   function nav(aktif) {
@@ -191,6 +191,9 @@
     const jad = r.jadwal.length ? r.jadwal.map(kartuJadwal).join('') : '<div class="jadwal-row"><div class="ico" style="background:#94a3b8">L</div><div class="t"><b>' + esc(r.libur || 'Tidak ada jadwal') + '</b><span>Presensi tanpa jadwal ditandai LUAR JADWAL</span></div></div>';
     const notif = (r.notifikasi || []).map(n => '<div class="note ' + (n.status === 'DISETUJUI' ? 'ok' : 'bad') + '"><span class="ni">' + I.bell + '</span><div>Pengajuan <b>' + esc(n.jenis) + '</b> ' + esc(n.tgl) + ': <b>' + esc(n.status) + '</b>' + (n.catatan ? '<br><small style="color:var(--muted)">' + esc(n.catatan) + '</small>' : '') + '</div></div>').join('') +
       (r.menunggu ? '<div class="note info"><span class="ni">' + I.jam + '</span><div>' + r.menunggu + ' pengajuan Anda <b>menunggu persetujuan</b> admin.</div></div>' : '');
+    const tk = r.tukar || { masuk: 0, daftar: [], hasil: [] };
+    const notifTukar = (tk.masuk ? '<button class="note tk-note" data-go="tukar"><span class="ni">⇄</span><div><b>' + tk.masuk + ' permintaan tukar shift</b> menunggu jawaban Anda' + (tk.daftar[0] ? '<br><small>' + esc(tk.daftar[0].dengan.nama) + ' · ' + esc(tglPendek(tk.daftar[0].tanggal)) + ': ' + esc(tk.daftar[0].saya_sebelum[0].kode) + ' → ' + esc(tk.daftar[0].saya_sesudah[0].kode) + '</small>' : '') + '</div><span class="tk-go">Jawab ›</span></button>' : '') +
+      (tk.hasil || []).map(x => '<div class="note ' + (x.status === 'DISETUJUI' ? 'ok' : 'bad') + '"><span class="ni">⇄</span><div>Tukar shift dengan <b>' + esc(x.dengan.nama) + '</b> ' + esc(tglPendek(x.tanggal)) + ': <b>' + esc((ST_TK[x.status] || [x.status])[0]) + '</b>' + (x.catatan ? '<br><small style="color:var(--muted)">' + esc(x.catatan) + '</small>' : '') + '</div></div>').join('');
     const ak = r.akumulasi || {};
     app.innerHTML = '<div class="view"><div class="hero"><div class="topbar"><img class="logo" src="' + esc(logo()) + '" alt="Logo"><div class="nm"><b>Presensi Dara Juanti</b><small>UPTD Puskesmas · Rawat Inap</small></div><button class="avatar" data-go="profil" aria-label="Profil">' + esc(p.inisial) + '</button></div>' +
       '<div class="greet"><small>' + salam(t) + '</small><h1>' + esc(nama) + (contoh ? ' <span class="tag contoh">CONTOH</span>' : '') + '</h1><div class="sub">' + esc(p.jabatan) + ' · ' + esc(p.unit) + '</div></div></div>' +
@@ -199,9 +202,10 @@
       '<div class="aksi">' +
       '<button class="btn-aksi b-masuk" data-go="scan" data-arg="MASUK"><span class="bi">' + I.masuk + '</span><div><b>MASUK</b><span>Pindai QR name tag</span></div></button>' +
       '<button class="btn-aksi b-pulang" data-go="scan" data-arg="PULANG"><span class="bi">' + I.pulang + '</span><div><b>PULANG</b><span>Setelah masuk</span></div></button>' +
-      '<button class="btn-aksi b-izin" data-go="ajukan" data-arg="IZIN"><span class="bi">' + I.izin + '</span><div><b>IZIN</b><span>Unggah surat</span></div></button>' +
-      '<button class="btn-aksi b-sakit" data-go="ajukan" data-arg="SAKIT"><span class="bi">' + I.sakit + '</span><div><b>SAKIT</b><span>Unggah bukti</span></div></button>' +
-      '<button class="btn-aksi b-tl" data-go="ajukan" data-arg="TL"><span class="bi">' + I.tl + '</span><div class="tx"><b>TUGAS LAPANGAN (TL)</b><span>Surat tugas · boleh di luar area</span></div></button></div>' + notif +
+      '<button class="btn-aksi b-izin" data-go="ajukan" data-arg="IZIN"><span class="bi">' + I.izin + '</span><div><b>IZIN</b><span>' + (r.bukti_lebih_hari !== undefined ? 'Dokumen bila &gt; ' + esc(r.bukti_lebih_hari) + ' hari' : 'Unggah surat') + '</span></div></button>' +
+      '<button class="btn-aksi b-sakit" data-go="ajukan" data-arg="SAKIT"><span class="bi">' + I.sakit + '</span><div><b>SAKIT</b><span>' + (r.bukti_lebih_hari !== undefined ? 'Dokumen bila &gt; ' + esc(r.bukti_lebih_hari) + ' hari' : 'Unggah bukti') + '</span></div></button>' +
+      '<button class="btn-aksi b-tl" data-go="ajukan" data-arg="TL"><span class="bi">' + I.tl + '</span><div class="tx"><b>TUGAS LAPANGAN (TL)</b><span>Surat tugas · boleh di luar area</span></div></button>' +
+      (r.bisa_tukar ? '<button class="btn-aksi b-tukar" data-go="tukar"><span class="bi">⇄</span><div class="tx"><b>TUKAR SHIFT</b><span>Dengan rekan · disetujui rekan, tanpa admin</span></div>' + (tk.masuk ? '<em class="bdg">' + tk.masuk + '</em>' : '') + '</button>' : '') + '</div>' + notifTukar + notif +
       '<div class="card"><h3>Akumulasi ' + BULAN[wib(t).getUTCMonth()] + '</h3><div class="mini-stat"><div><small>Total terlambat</small><b>' + esc(ak.t_teks || '0 menit') + '</b><small>' + (ak.t_kali || 0) + ' kali</small></div><div><small>Total pulang awal</small><b>' + esc(ak.pa_teks || '0 menit') + '</b><small>' + (ak.pa_kali || 0) + ' kali</small></div></div></div>' +
       '</div></div>' + nav('beranda');
     S.timers.push(setInterval(() => { const el = $('#jam'); if (el) { const x = now(); el.innerHTML = jamTeks(x) + '<small>:' + pad(wib(x).getUTCSeconds()) + '</small>'; } }, 1000));
@@ -264,21 +268,48 @@
       '<div class="status-band bad" style="font-size:15px;line-height:1.4">' + esc(pesan) + '</div></div><div class="pad"><button class="btn pri" data-go="scan" data-arg="' + jenis + '" style="margin-bottom:10px">Coba lagi</button><button class="btn sec" data-go="beranda">Kembali ke beranda</button>' +
       '<p style="font-size:12.5px;color:var(--muted);text-align:center;margin-top:14px">Percobaan yang gagal tercatat. Bila ada kendala, hubungi admin untuk koreksi.</p></div></div>' + nav('beranda');
   }
-  // ---------- AJUKAN IZIN/SAKIT/TL ----------
+  // ---------- AJUKAN IZIN/SAKIT/TL (TAHAP 3: dokumen hanya wajib bila > N hari, termasuk yang bersambung; TL selalu) ----------
   function viewAjukan(jenis) {
     if (['IZIN', 'SAKIT', 'TL'].indexOf(jenis) < 0) jenis = 'IZIN';
     mulaiGps();
     const t = wib(now()), hari = t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate());
-    const lbl = { IZIN: 'Surat/keterangan izin', SAKIT: 'Bukti (surat keterangan sakit)', TL: 'Surat tugas' }[jenis];
+    const ambang = (S.info && S.info.bukti_wajib_lebih_hari !== undefined) ? S.info.bukti_wajib_lebih_hari : 3;
+    const lbl = { IZIN: 'Surat/keterangan izin', SAKIT: 'Surat keterangan sakit', TL: 'Surat tugas' }[jenis];
     const ph = { IZIN: 'Mis. keperluan keluarga mendesak…', SAKIT: 'Mis. demam, istirahat sesuai anjuran dokter…', TL: 'Lokasi & kegiatan tugas lapangan…' }[jenis];
+    const m0 = S.ajTgl && S.ajTgl.m >= hari ? S.ajTgl.m : hari, s0 = S.ajTgl && S.ajTgl.s >= m0 ? S.ajTgl.s : m0;
     app.innerHTML = '<div class="view">' + appbar('Pengajuan Ketidakhadiran') + '<form class="pad" id="f-aj">' +
       '<div class="seg">' + ['IZIN', 'SAKIT', 'TL'].map(j => '<button type="button" data-go="ajukan" data-arg="' + j + '" class="' + (j === jenis ? 'on' : '') + '">' + (j === 'TL' ? 'TL' : j.charAt(0) + j.slice(1).toLowerCase()) + '</button>').join('') + '</div>' +
-      '<div class="card"><div class="row2"><label class="f"><span>Tanggal mulai</span><input class="inp" type="date" name="m" value="' + hari + '" required></label><label class="f"><span>Tanggal selesai</span><input class="inp" type="date" name="s" value="' + hari + '" required></label></div>' +
+      '<div class="card"><div class="row2"><label class="f"><span>Tanggal mulai</span><input class="inp" type="date" name="m" value="' + m0 + '" required></label><label class="f"><span>Tanggal selesai</span><input class="inp" type="date" name="s" value="' + s0 + '" required></label></div>' +
       '<label class="f"><span>Keterangan</span><textarea class="inp" name="k" maxlength="500" required placeholder="' + ph + '"></textarea></label>' +
-      '<label class="f" style="margin:0"><span>' + lbl + ' · wajib</span></label><div class="upload"><div id="file-chip"></div><div class="row2"><label class="btn sec" style="min-height:46px;font-size:14px">' + I.cam + ' Kamera<input type="file" accept="image/*" capture="environment" class="hidden" id="in-cam"></label><label class="btn sec" style="min-height:46px;font-size:14px">' + I.file + ' Galeri/PDF<input type="file" accept="image/jpeg,image/png,application/pdf" class="hidden" id="in-file"></label></div><p style="font-size:12px;color:var(--muted);margin:8px 0 0">JPG/PNG/PDF, maks. ' + Math.round(((S.info && S.info.bukti_maks_kb) || 2048) / 1024) + ' MB. Foto dikompres otomatis.</p></div></div>' +
+      '<div id="bukti-info" class="bukti-info">' + (jenis === 'TL' ? '' : '<span class="spin d" style="width:14px;height:14px;border-width:2px"></span> Memeriksa aturan dokumen…') + '</div>' +
+      '<div id="up-wrap" class="' + (jenis === 'TL' ? '' : 'hidden') + '"><label class="f" style="margin:0"><span>' + lbl + ' · <b style="color:var(--merah)">wajib</b></span></label><div class="upload"><div id="file-chip"></div><div class="row2"><label class="btn sec" style="min-height:46px;font-size:14px">' + I.cam + ' Kamera<input type="file" accept="image/*" capture="environment" class="hidden" id="in-cam"></label><label class="btn sec" style="min-height:46px;font-size:14px">' + I.file + ' Galeri/PDF<input type="file" accept="image/jpeg,image/png,application/pdf" class="hidden" id="in-file"></label></div><p style="font-size:12px;color:var(--muted);margin:8px 0 0">JPG/PNG/PDF, maks. ' + Math.round(((S.info && S.info.bukti_maks_kb) || 2048) / 1024) + ' MB. Foto dikompres otomatis.</p></div></div></div>' +
       '<div class="card" style="padding:8px 16px"><div id="gps-aj">' + gpsAjukan() + '</div><div class="chk ok"><span class="ci">✓</span><b>HP terdaftar</b><span>waktu server ' + jamTeks(now()) + ' WIB</span></div></div>' +
-      '<button class="btn pri" id="b-aj">Kirim Pengajuan</button><p style="font-size:12.5px;color:var(--muted);text-align:center">Pengajuan berlaku setelah disetujui admin. Batas pengajuan H+1.</p></form></div>' + nav('beranda');
-    let bukti = null;
+      '<button class="btn pri" id="b-aj">Kirim Pengajuan</button><p style="font-size:12.5px;color:var(--muted);text-align:center">Pengajuan berlaku setelah disetujui admin. ' + (jenis === 'TL' ? 'Tugas lapangan selalu disertai surat tugas.' : 'Izin/sakit sampai ' + ambang + ' hari tidak perlu dokumen; lebih dari ' + ambang + ' hari (termasuk yang bersambung dengan pengajuan sebelumnya/sesudahnya) wajib dokumen.') + '</p></form></div>' + nav('beranda');
+    let bukti = null, wajib = jenis === 'TL', cekNo = 0, tCek = null;
+    const tampilUnggah = (w, pesan, kelas) => {
+      app.querySelectorAll('.aj-bentrok').forEach(x => x.remove());
+      wajib = w; $('#up-wrap').classList.toggle('hidden', !w);
+      const bi = $('#bukti-info'); if (!bi) return;
+      bi.className = 'bukti-info ' + (kelas || (w ? 'wajib' : 'bebas'));
+      bi.innerHTML = pesan ? (w ? '📎 ' : '✓ ') + esc(pesan) : '';
+    };
+    if (jenis === 'TL') tampilUnggah(true, 'Tugas Lapangan wajib disertai surat tugas.');
+    const cekAturan = () => {
+      if (jenis === 'TL') return;
+      const f = $('#f-aj'); if (!f) return;
+      const m = f.m.value, s = f.s.value || m; S.ajTgl = { m, s };
+      if (!m || s < m) return tampilUnggah(false, 'Periksa tanggal.', 'bebas');
+      const no = ++cekNo;
+      api('ajukan.cek', { jenis, tgl_mulai: m, tgl_selesai: s }).then(r => {
+        if (no !== cekNo) return;
+        tampilUnggah(r.wajib_bukti, r.pesan);
+        const bi = $('#bukti-info'); if (bi && r.bentrok) bi.insertAdjacentHTML('afterend', '<div class="bukti-info wajib aj-bentrok">⚠ ' + esc(r.bentrok) + ' Ubah tanggal atau batalkan pengajuan lama.</div>');
+      }).catch(e => { if (no === cekNo && e.kode !== 'SESI') tampilUnggah(false, e.message, 'bebas'); });
+    };
+    const jadwalkanCek = () => { clearTimeout(tCek); tCek = setTimeout(cekAturan, 350); };
+    $('#f-aj').m.onchange = () => { const f = $('#f-aj'); if (f.s.value < f.m.value) f.s.value = f.m.value; jadwalkanCek(); };
+    $('#f-aj').s.onchange = jadwalkanCek;
+    cekAturan();
     const pilih = async (f) => {
       if (!f) return;
       const maks = ((S.info && S.info.bukti_maks_kb) || 2048) * 1024;
@@ -293,20 +324,26 @@
     S.timers.push(setInterval(() => { const g = $('#gps-aj'); if (g) g.innerHTML = gpsAjukan(); }, 3000));
     $('#f-aj').onsubmit = async e => {
       e.preventDefault(); const f = e.target, b = $('#b-aj');
-      if (!bukti) return toast('Bukti/surat wajib diunggah.', 'bad');
       if (f.s.value < f.m.value) return toast('Tanggal selesai sebelum tanggal mulai.', 'bad');
+      if (wajib && !bukti) return toast(jenis === 'TL' ? 'Surat tugas wajib diunggah.' : 'Dokumen pendukung wajib diunggah untuk izin/sakit lebih dari ' + ambang + ' hari.', 'bad', 5000);
       let pos; try { pos = await posisiSegar(); } catch (er) { return toast(er.message, 'bad', 5000); }
-      const data = { jenis, tgl_mulai: f.m.value, tgl_selesai: f.s.value, keterangan: f.k.value, bukti: { b64: bukti.b64, mime: bukti.mime, nama: bukti.nama }, lat: pos.lat, lng: pos.lng, akurasi: pos.akurasi, request_id: rid() };
+      const data = { jenis, tgl_mulai: f.m.value, tgl_selesai: f.s.value, keterangan: f.k.value, lat: pos.lat, lng: pos.lng, akurasi: pos.akurasi, request_id: rid() };
+      if (bukti && wajib) data.bukti = { b64: bukti.b64, mime: bukti.mime, nama: bukti.nama };
       while (true) {
         const pin = (!S.info || S.info.pin_wajib !== false) ? await sheetPin('Masukkan PIN', 'Kirim pengajuan ' + jenis) : '';
         if (pin === null) return;
         data.pin = pin; b.disabled = true; b.innerHTML = '<span class="spin"></span> Mengirim…';
         try {
           const r = await api('ajukan', data, { timeout: 60000 });
-          S.beranda = null;
-          app.innerHTML = '<div class="view"><div class="hasil ok"><div class="big">' + I.ok + '</div><h2>Pengajuan ' + esc(jenis) + ' terkirim</h2><div class="tgl" style="margin-top:6px">' + esc(f.m.value) + (f.s.value !== f.m.value ? ' s.d. ' + esc(f.s.value) : '') + ' · ' + esc(r.waktu_server) + ' WIB</div><div class="status-band info">MENUNGGU PERSETUJUAN<small>Lokasi tercatat ' + jarakTeks(r.jarak) + ' dari Puskesmas' + (r.dalam_area ? '' : ' (di luar area — diizinkan)') + '</small></div></div><div class="pad"><div class="card dl"><div><span>ID pengajuan</span><b>' + esc(r.id_pengajuan) + '</b></div><div><span>Bukti</span><b>' + esc(bukti.nama) + '</b></div></div><button class="btn pri" data-go="beranda">Selesai</button></div></div>' + nav('beranda');
+          S.beranda = null; S.ajTgl = null;
+          app.innerHTML = '<div class="view"><div class="hasil ok"><div class="big">' + I.ok + '</div><h2>Pengajuan ' + esc(jenis) + ' terkirim</h2><div class="tgl" style="margin-top:6px">' + esc(f.m.value) + (f.s.value !== f.m.value ? ' s.d. ' + esc(f.s.value) : '') + ' · ' + esc(r.waktu_server) + ' WIB</div><div class="status-band info">MENUNGGU PERSETUJUAN<small>Lokasi tercatat ' + jarakTeks(r.jarak) + ' dari Puskesmas' + (r.dalam_area ? '' : ' (di luar area — diizinkan)') + '</small></div></div><div class="pad"><div class="card dl"><div><span>ID pengajuan</span><b>' + esc(r.id_pengajuan) + '</b></div><div><span>Dokumen</span><b>' + (r.bukti ? esc(bukti.nama) : 'Tidak dilampirkan (tidak wajib)') + '</b></div>' + (r.hari_berturut > 1 ? '<div><span>Lama (termasuk bersambung)</span><b>' + r.hari_berturut + ' hari</b></div>' : '') + '</div><button class="btn pri" data-go="beranda">Selesai</button></div></div>' + nav('beranda');
           return;
-        } catch (er) { b.disabled = false; b.textContent = 'Kirim Pengajuan'; if (er.kode === 'PIN') { toast(er.message, 'bad'); continue; } if (er.kode !== 'SESI') toast(er.message, 'bad', 6000); return; }
+        } catch (er) {
+          b.disabled = false; b.textContent = 'Kirim Pengajuan';
+          if (er.kode === 'PIN') { toast(er.message, 'bad'); continue; }
+          if (er.kode === 'BUKTI_WAJIB') { tampilUnggah(true, er.message.replace(/ Unggah dokumen.*$/, '')); toast('Unggah dokumen pendukung terlebih dahulu.', 'bad', 5000); $('#up-wrap').scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+          if (er.kode !== 'SESI') toast(er.message, 'bad', 6000); return;
+        }
       }
     };
   }
@@ -328,6 +365,119 @@
     }
     throw new Error('Foto terlalu besar meski sudah dikompres.');
   }
+  // ---------- TUKAR SHIFT (TAHAP 3: antarpegawai, disetujui langsung oleh rekan — tanpa admin) ----------
+  const ST_TK = { MENUNGGU_REKAN: ['Menunggu rekan', 'warn'], DISETUJUI: ['Disetujui · jadwal sudah ditukar', 'ok'], DITOLAK: ['Ditolak rekan', 'bad'], DIBATALKAN: ['Dibatalkan', 'mut'], KEDALUWARSA: ['Kedaluwarsa', 'mut'], GAGAL: ['Gagal validasi', 'bad'] };
+  const tglPendek = d => { const x = String(d || '').split('-'); return x.length === 3 ? (+x[2]) + ' ' + BULAN[+x[1] - 1].slice(0, 3) + ' ' + x[0] : d; };
+  const kodeKecil = (k, teks) => '<span class="kd" style="background:' + (WARNA[String(k || 'L').split('+')[0]] || '#334155') + '" title="' + esc(teks || '') + '">' + esc(k || 'L') + '</span>';
+  const swapHtml = (seb, ses) => '<div class="tk-swap">' + seb.map((x, i) => '<div><small>' + esc(tglPendek(x.tgl)) + '</small>' + kodeKecil(x.kode, x.teks) + '<i>→</i>' + kodeKecil(ses[i] && ses[i].kode, ses[i] && ses[i].teks) + '<span>' + esc((ses[i] && ses[i].teks) || '') + '</span></div>').join('') + '</div>';
+  function kartuTukar(r, mode) {
+    const st = ST_TK[r.status] || [r.status, 'mut'];
+    return '<div class="card tk-card"><div class="tk-head"><div><b>' + (r.peran === 'REKAN' ? esc(r.dengan.nama) + ' mengajak tukar shift' : 'Tukar dengan ' + esc(r.dengan.nama)) + '</b><small>' + esc(r.dengan.unit) + ' · ' + esc(String(r.diajukan_pada).slice(0, 16)) + ' WIB</small></div><span class="tag ' + st[1] + '">' + esc(st[0]) + '</span></div>' +
+      '<div class="tk-lbl">Jadwal Anda</div>' + swapHtml(r.saya_sebelum, r.saya_sesudah) +
+      (r.alasan ? '<p class="tk-al">“' + esc(r.alasan) + '”</p>' : '') + (r.catatan && r.status !== 'MENUNGGU_REKAN' ? '<p class="tk-al" style="color:var(--muted)">' + esc(r.catatan) + '</p>' : '') +
+      (r.status === 'MENUNGGU_REKAN' && r.kedaluwarsa ? '<p class="tk-exp">' + I.jam.replace('<svg', '<svg width="14" height="14"') + ' Berlaku sampai ' + esc(String(r.kedaluwarsa).slice(0, 16)) + ' WIB</p>' : '') +
+      (mode === 'masuk' ? '<div class="row2"><button class="btn bad" data-tk-tolak="' + esc(r.id) + '">Tolak</button><button class="btn pri" data-tk-setuju="' + esc(r.id) + '">Setuju</button></div>' : mode === 'keluar' ? '<button class="btn sec" data-tk-batal="' + esc(r.id) + '">Batalkan permintaan</button>' : '') + '</div>';
+  }
+  async function viewTukar() {
+    app.innerHTML = '<div class="view">' + appbar('Tukar Shift') + '<div class="pad" id="isi"><div class="loading"><span class="spin d"></span></div></div></div>' + nav('jadwal');
+    let d;
+    try { d = await api('tukar.daftar', {}); } catch (e) { $('#isi').innerHTML = '<p>' + esc(e.message) + '</p>'; return; }
+    $('#isi').innerHTML = (d.bisa_tukar ? '<button class="btn pri" data-go="tukar" data-arg="baru" style="margin-bottom:14px">⇄ Ajukan tukar shift</button>' : '<div class="note info"><span class="ni">' + I.kal + '</span><div>Tukar shift hanya untuk pegawai grup SHIFT.</div></div>') +
+      '<div class="sec-title">Permintaan masuk' + (d.masuk.length ? ' · ' + d.masuk.length : '') + '</div>' + (d.masuk.length ? d.masuk.map(r => kartuTukar(r, 'masuk')).join('') : '<p class="kosong">Tidak ada permintaan yang menunggu jawaban Anda.</p>') +
+      '<div class="sec-title">Permintaan saya</div>' + (d.keluar.length ? d.keluar.map(r => kartuTukar(r, 'keluar')).join('') : '<p class="kosong">Tidak ada permintaan yang sedang menunggu.</p>') +
+      '<div class="sec-title">Riwayat</div>' + (d.riwayat.length ? d.riwayat.map(r => kartuTukar(r, '')).join('') : '<p class="kosong">Belum ada riwayat tukar shift.</p>') +
+      '<p style="font-size:12px;color:var(--muted)">Bila rekan menyetujui, jadwal Anda berdua langsung bertukar tanpa persetujuan admin. Admin tetap dapat memantau di menu Riwayat Tukar Shift. Permintaan otomatis kedaluwarsa bila tidak dijawab.</p>';
+    const cari = id => d.masuk.concat(d.keluar).filter(r => r.id === id)[0];
+    app.querySelectorAll('[data-tk-setuju]').forEach(b => b.onclick = async () => {
+      const r = cari(b.dataset.tkSetuju);
+      while (true) {
+        const pin = (!S.info || S.info.pin_wajib !== false) ? await sheetPin('Setujui tukar shift', 'Jadwal Anda: ' + r.saya_sebelum.map(x => x.kode + ' → ').join('') + r.saya_sesudah.map(x => x.kode).join(', ')) : '';
+        if (pin === null) return;
+        b.disabled = true;
+        try { await api('tukar.respon', { id: r.id, keputusan: 'SETUJU', pin }); S.beranda = null; toast('Disetujui. Jadwal Anda dan ' + r.dengan.nama + ' sudah ditukar.', 'ok', 5000); return viewTukar(); }
+        catch (e) { b.disabled = false; if (e.kode === 'PIN') { toast(e.message, 'bad'); continue; } if (e.kode !== 'SESI') { toast(e.message, 'bad', 6000); viewTukar(); } return; }
+      }
+    });
+    app.querySelectorAll('[data-tk-tolak]').forEach(b => b.onclick = () => {
+      const r = cari(b.dataset.tkTolak);
+      const el = openSheet('<h3>Tolak permintaan ' + esc(r.dengan.nama) + '?</h3><label class="f"><span>Catatan untuk rekan (opsional)</span><input class="inp" id="tk-cat" maxlength="200" placeholder="Mis. sudah ada acara keluarga"></label><div class="row2"><button class="btn sec" id="tk-x">Kembali</button><button class="btn bad" id="tk-ok">Tolak</button></div>');
+      $('#tk-x', el).onclick = closeSheet;
+      $('#tk-ok', el).onclick = async () => { const cat = $('#tk-cat', el).value; closeSheet(); try { await api('tukar.respon', { id: r.id, keputusan: 'TOLAK', catatan: cat }); S.beranda = null; toast('Permintaan ditolak.', 'ok'); } catch (e) { if (e.kode !== 'SESI') toast(e.message, 'bad', 6000); } viewTukar(); };
+    });
+    app.querySelectorAll('[data-tk-batal]').forEach(b => b.onclick = async () => { b.disabled = true; try { await api('tukar.batal', { id: b.dataset.tkBatal }); toast('Permintaan dibatalkan.', 'ok'); } catch (e) { if (e.kode !== 'SESI') toast(e.message, 'bad', 6000); } viewTukar(); });
+  }
+  async function viewTukarBaru() {
+    const t = wib(now() + 86400000), besok = t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate());
+    const st = S.tkForm || (S.tkForm = { tanggal: besok, beda: false, tanggal_b: besok, rekan: '', q: '' });
+    app.innerHTML = '<div class="view">' + appbar('Ajukan Tukar Shift', 'tukar') + '<form class="pad" id="f-tk">' +
+      '<div class="card"><label class="f"><span>Tanggal shift Anda yang ingin ditukar</span><input class="inp" type="date" name="d" value="' + esc(st.tanggal) + '" required></label>' +
+      '<label class="chkline"><input type="checkbox" name="beda"' + (st.beda ? ' checked' : '') + '> Rekan memberi shift pada <b>tanggal lain</b></label>' +
+      '<label class="f' + (st.beda ? '' : ' hidden') + '" id="w-db"><span>Tanggal shift rekan</span><input class="inp" type="date" name="db" value="' + esc(st.tanggal_b) + '"></label><div id="tk-saya"></div></div>' +
+      '<div class="card"><h3>Pilih rekan</h3><input class="inp" id="tk-q" placeholder="Cari nama / unit…" value="' + esc(st.q) + '" style="margin-bottom:10px"><div id="tk-rekan"><div class="loading"><span class="spin d"></span></div></div></div>' +
+      '<div class="card" id="tk-prev"></div>' +
+      '<div class="card"><label class="f" style="margin:0"><span>Alasan / kesepakatan</span><textarea class="inp" name="al" maxlength="200" required placeholder="Mis. sudah sepakat lewat telepon, ada keperluan keluarga…"></textarea></label></div>' +
+      '<button class="btn pri" id="b-tk" disabled>Kirim permintaan ke rekan</button><p style="font-size:12.5px;color:var(--muted);text-align:center">Rekan menerima notifikasi di aplikasi dan menjawab SETUJU/TOLAK. Bila disetujui, jadwal langsung bertukar.</p></form></div>' + nav('jadwal');
+    const f = $('#f-tk'); let opsi = null, no = 0, noCek = 0;
+    const pilihRekan = () => opsi && opsi.rekan.filter(x => x.id === st.rekan)[0];
+    const renderRekan = () => {
+      if (!opsi) return;
+      const kerja = k => !!k && k !== 'L' && k !== 'C', beda = st.beda && opsi.tanggal_b !== opsi.tanggal;
+      if (!kerja(opsi.saya.kode_a)) { $('#tk-rekan').innerHTML = '<p class="kosong">Anda tidak memiliki shift pada tanggal ini — pilih tanggal lain.</p>'; return; }
+      const cocok = x => x.kode_a !== 'C' && x.kode_b !== 'C' && (beda ? kerja(x.kode_b) : x.kode_a !== opsi.saya.kode_a);
+      const q = st.q.toLowerCase(), daftar = opsi.rekan.filter(x => cocok(x) && (!q || (x.nama + ' ' + x.unit + ' ' + x.jabatan).toLowerCase().indexOf(q) >= 0));
+      const kodeR = x => st.beda ? x.kode_b : x.kode_a;
+      $('#tk-rekan').innerHTML = daftar.length ? '<div class="tk-list">' + daftar.slice(0, 40).map(x => '<label class="tk-opt' + (x.id === st.rekan ? ' on' : '') + '"><input type="radio" name="rk" value="' + esc(x.id) + '"' + (x.id === st.rekan ? ' checked' : '') + '><div><b>' + esc(x.nama) + '</b><small>' + esc(x.unit) + (x.sama_unit ? ' · unit sama' : '') + '</small></div>' + kodeKecil(kodeR(x) || '–', opsi.kode[kodeR(x)]) + '</label>').join('') + '</div>' : '<p class="kosong">Tidak ada rekan sesuai pencarian.</p>';
+      $('#tk-rekan').querySelectorAll('input[name=rk]').forEach(r => r.onchange = () => { st.rekan = r.value; renderRekan(); renderPrev(); });
+    };
+    const renderPrev = () => {
+      const p = $('#tk-prev'), r = pilihRekan(), b = $('#b-tk');
+      if (!opsi || !r) { p.innerHTML = '<h3>Pratinjau</h3><p class="kosong" style="margin:0">Pilih rekan untuk melihat jadwal sesudah ditukar.</p>'; b.disabled = true; return; }
+      const da = opsi.tanggal, db = opsi.tanggal_b, beda = st.beda && db !== da;
+      const sayaSeb = [{ tgl: da, kode: opsi.saya.kode_a }].concat(beda ? [{ tgl: db, kode: opsi.saya.kode_b }] : []);
+      const sayaSes = [{ tgl: da, kode: r.kode_a }].concat(beda ? [{ tgl: db, kode: r.kode_b }] : []);
+      const isi = x => x.map(y => Object.assign({ teks: opsi.kode[y.kode] || (y.kode === 'L' || !y.kode ? 'Libur' : y.kode) }, y));
+      p.innerHTML = '<h3>Pratinjau sesudah ditukar</h3><div class="tk-lbl">Anda</div>' + swapHtml(isi(sayaSeb), isi(sayaSes)) + '<div class="tk-lbl">' + esc(r.nama) + '</div>' + swapHtml(isi(sayaSes), isi(sayaSeb)) +
+        '<p style="font-size:12px;color:var(--muted);margin:8px 0 0">Server memeriksa ulang: jadwal sudah TERBIT, belum ada presensi, tidak dua shift sehari, dan jeda istirahat minimal ' + esc(opsi.jeda_min_jam) + ' jam (mis. Malam lalu Pagi ditolak).</p>';
+      b.disabled = true;
+      if (!opsi.terbit) return;
+      // pra-cek server untuk rekan terpilih (bentrok/jeda istirahat/presensi) sebelum meminta PIN
+      const n = ++noCek; p.insertAdjacentHTML('beforeend', '<div id="tk-cek" class="bukti-info"><span class="spin d" style="width:14px;height:14px;border-width:2px"></span> Memeriksa jadwal…</div>');
+      api('tukar.opsi', { tanggal: st.tanggal, tanggal_b: st.tanggal_b, cek_rekan: r.id }).then(o => {
+        if (n !== noCek) return; const c = $('#tk-cek'); if (!c) return; const ok = o.cek && o.cek.ok;
+        c.className = 'bukti-info ' + (ok ? 'bebas' : 'wajib'); c.textContent = ok ? '✓ Jadwal aman untuk ditukar.' : '⚠ ' + ((o.cek && o.cek.pesan) || 'Tidak dapat ditukar.');
+        b.disabled = !ok;
+      }).catch(e => { if (n === noCek && e.kode !== 'SESI') { const c = $('#tk-cek'); if (c) { c.className = 'bukti-info wajib'; c.textContent = e.message; } } });
+    };
+    const muat = () => {
+      st.tanggal = f.d.value; st.beda = f.beda.checked; st.tanggal_b = st.beda ? (f.db.value || st.tanggal) : st.tanggal;
+      $('#w-db').classList.toggle('hidden', !st.beda);
+      const n = ++no; $('#tk-rekan').classList.add('memuat');
+      api('tukar.opsi', { tanggal: st.tanggal, tanggal_b: st.tanggal_b }).then(o => {
+        if (n !== no) return; opsi = o; $('#tk-rekan').classList.remove('memuat');
+        $('#tk-saya').innerHTML = '<div class="note ' + (o.terbit ? 'info' : 'bad') + '" style="box-shadow:none;background:#f6f8fa;margin:10px 0 0"><span class="ni">' + I.kal + '</span><div>' + (o.terbit ? 'Shift Anda ' + esc(tglPendek(o.tanggal)) + ': <b>' + esc(o.kode[o.saya.kode_a] || o.saya.kode_a || 'Libur') + '</b>' + (st.beda ? ' · ' + esc(tglPendek(o.tanggal_b)) + ': <b>' + esc(o.kode[o.saya.kode_b] || o.saya.kode_b || 'Libur') + '</b>' : '') : 'Jadwal bulan tersebut belum TERBIT — tukar shift belum bisa diajukan.') + '</div></div>';
+        renderRekan(); renderPrev();
+      }).catch(e => { if (n === no && e.kode !== 'SESI') { $('#tk-rekan').classList.remove('memuat'); $('#tk-rekan').innerHTML = '<p class="kosong">' + esc(e.message) + '</p>'; } });
+    };
+    f.d.onchange = muat; f.beda.onchange = muat; f.db.onchange = muat;
+    let tq = null; $('#tk-q').oninput = e => { clearTimeout(tq); tq = setTimeout(() => { st.q = e.target.value; renderRekan(); }, 250); };
+    muat();
+    f.onsubmit = async e => {
+      e.preventDefault(); const b = $('#b-tk'), r = pilihRekan(); if (!r) return toast('Pilih rekan.', 'bad');
+      if (f.al.value.trim().length < 5) return toast('Isi alasan/kesepakatan (min. 5 karakter).', 'bad');
+      const data = { tanggal: st.tanggal, tanggal_b: st.beda ? st.tanggal_b : '', rekan: r.id, alasan: f.al.value.trim(), request_id: rid() };
+      while (true) {
+        const pin = (!S.info || S.info.pin_wajib !== false) ? await sheetPin('Masukkan PIN', 'Ajukan tukar shift dengan ' + r.nama) : '';
+        if (pin === null) return;
+        data.pin = pin; b.disabled = true; b.innerHTML = '<span class="spin"></span> Mengirim…';
+        try {
+          const x = await api('tukar.ajukan', data);
+          S.tkForm = null; S.beranda = null;
+          app.innerHTML = '<div class="view"><div class="hasil ok"><div class="big">' + I.ok + '</div><h2>Permintaan terkirim</h2><div class="tgl" style="margin-top:6px">ke ' + esc(x.rekan) + '</div><div class="status-band info">MENUNGGU JAWABAN REKAN<small>Berlaku sampai ' + esc(String(x.kedaluwarsa).slice(0, 16)) + ' WIB</small></div></div><div class="pad"><div class="card dl"><div><span>ID</span><b>' + esc(x.id) + '</b></div><div><span>Tanggal</span><b>' + esc(tglPendek(data.tanggal)) + (data.tanggal_b ? ' & ' + esc(tglPendek(data.tanggal_b)) : '') + '</b></div></div><button class="btn pri" data-go="tukar">Lihat permintaan</button></div></div>' + nav('jadwal');
+          return;
+        } catch (er) { b.disabled = false; b.textContent = 'Kirim permintaan ke rekan'; if (er.kode === 'PIN') { toast(er.message, 'bad'); continue; } if (er.kode !== 'SESI') toast(er.message, 'bad', 7000); return; }
+      }
+    };
+  }
   // ---------- JADWAL ----------
   async function viewJadwal(bulanArg) {
     const t = wib(now()), bulan = bulanArg || S.blnJadwal || (t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1));
@@ -338,8 +488,9 @@
       const r = await api('jadwal', { bulan });
       const hariIni = t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate());
       $('#isi').innerHTML = (r.terbit ? '' : '<div class="note info"><span class="ni">' + I.kal + '</span><div>Jadwal shift bulan ini <b>belum dipublikasikan</b> admin.</div></div>') +
+        (S.beranda && S.beranda.bisa_tukar === false ? '' : '<button class="btn sec" data-go="tukar" style="margin-bottom:12px">⇄ Tukar shift dengan rekan</button>') +
         r.hari.map(h => '<div class="list-item ' + (h.tanggal === hariIni ? 'today' : '') + '"><div class="d"><b>' + (+h.tanggal.slice(8)) + '</b><small>' + esc(h.hari.slice(0, 3)) + '</small></div><div class="m">' +
-          (h.shift.length ? h.shift.map(s => '<b>' + esc(s.nama) + '</b><span>' + esc(s.jam) + '</span>').join('<br>') : '<b style="color:var(--muted)">' + esc(h.raw === 'C' ? 'Cuti' : h.ket || (h.raw === 'L' || h.raw === 'LN' ? 'Libur' : '—')) + '</b>') + '</div>' +
+          (h.shift.length ? h.shift.map(s => '<b>' + esc(s.nama) + '</b><span>' + esc(s.jam) + '</span>').join('<br>') : '<b style="color:var(--muted)">' + esc(h.raw === 'C' ? 'Cuti' : h.ket || (h.raw === 'L' || h.raw === 'LN' ? 'Libur' : '—')) + '</b>') + (h.tukar ? '<span class="tk-mark">⇄ tukar dengan ' + esc(h.tukar.dengan) + ' (' + esc(h.tukar.sebelum) + ' → ' + esc(h.tukar.sesudah) + ')</span>' : '') + '</div>' +
           (h.shift.length ? h.shift.map(s => '<span class="kode" style="background:' + (WARNA[s.kode] || '#0b5d3b') + '">' + esc(s.kode) + '</span>').join('') : '<span class="kode" style="background:' + (h.raw === 'C' ? WARNA.C : '#cbd5e1') + '">' + esc(h.raw === 'C' ? 'C' : 'L') + '</span>') + '</div>').join('');
       const el = document.querySelector('.list-item.today'); if (el) el.scrollIntoView({ block: 'center' });
     } catch (e) { $('#isi').innerHTML = '<p>' + esc(e.message) + '</p>'; }
