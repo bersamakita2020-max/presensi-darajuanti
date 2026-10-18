@@ -195,3 +195,7 @@ textarea.inp{min-height:92px;resize:vertical}
 .memuat{opacity:.5;pointer-events:none}
 .toast{pointer-events:none}
 .row2>*{min-width:0}.row2 .inp{min-width:0;width:100%}input[type=date].inp{min-width:0;max-width:100%}
+/* TAHAP 4: penanda hari libur */
+.list-item.libur .d b{color:#b42323}
+.lbr-mark{display:block;font-size:11.5px;font-weight:600;color:#a32b2b;background:#fdeaea;border-radius:6px;padding:2px 7px;margin:0 0 4px;width:fit-content}
+.note.lbr{background:#fdf2f2;border-color:#f3c7c7}

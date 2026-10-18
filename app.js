@@ -188,7 +188,8 @@
     const r = S.beranda, p = r.profil, t = now();
     const contoh = /\(CONTOH\)/.test(p.nama);
     const nama = p.nama.replace(/\s*\(CONTOH\)/, '');
-    const jad = r.jadwal.length ? r.jadwal.map(kartuJadwal).join('') : '<div class="jadwal-row"><div class="ico" style="background:#94a3b8">L</div><div class="t"><b>' + esc(r.libur || 'Tidak ada jadwal') + '</b><span>Presensi tanpa jadwal ditandai LUAR JADWAL</span></div></div>';
+    const lbr = r.hari_libur && r.jadwal.length ? '<div class="note info lbr"><span class="ni">' + I.kal + '</span><div>Hari ini <b>' + esc(r.hari_libur.nama) + '</b>. Anda tetap terjadwal dinas — presensi seperti biasa.</div></div>' : '';
+    const jad = lbr + (r.jadwal.length ? r.jadwal.map(kartuJadwal).join('') : '<div class="jadwal-row"><div class="ico" style="background:#94a3b8">L</div><div class="t"><b>' + esc(r.libur || 'Tidak ada jadwal') + '</b><span>Presensi tanpa jadwal ditandai LUAR JADWAL</span></div></div>');
     const notif = (r.notifikasi || []).map(n => '<div class="note ' + (n.status === 'DISETUJUI' ? 'ok' : 'bad') + '"><span class="ni">' + I.bell + '</span><div>Pengajuan <b>' + esc(n.jenis) + '</b> ' + esc(n.tgl) + ': <b>' + esc(n.status) + '</b>' + (n.catatan ? '<br><small style="color:var(--muted)">' + esc(n.catatan) + '</small>' : '') + '</div></div>').join('') +
       (r.menunggu ? '<div class="note info"><span class="ni">' + I.jam + '</span><div>' + r.menunggu + ' pengajuan Anda <b>menunggu persetujuan</b> admin.</div></div>' : '');
     const tk = r.tukar || { masuk: 0, daftar: [], hasil: [] };
@@ -489,7 +490,8 @@
       const hariIni = t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate());
       $('#isi').innerHTML = (r.terbit ? '' : '<div class="note info"><span class="ni">' + I.kal + '</span><div>Jadwal shift bulan ini <b>belum dipublikasikan</b> admin.</div></div>') +
         (S.beranda && S.beranda.bisa_tukar === false ? '' : '<button class="btn sec" data-go="tukar" style="margin-bottom:12px">⇄ Tukar shift dengan rekan</button>') +
-        r.hari.map(h => '<div class="list-item ' + (h.tanggal === hariIni ? 'today' : '') + '"><div class="d"><b>' + (+h.tanggal.slice(8)) + '</b><small>' + esc(h.hari.slice(0, 3)) + '</small></div><div class="m">' +
+        r.hari.map(h => '<div class="list-item ' + (h.tanggal === hariIni ? 'today' : '') + (h.libur ? ' libur' : '') + '"><div class="d"><b>' + (+h.tanggal.slice(8)) + '</b><small>' + esc(h.hari.slice(0, 3)) + '</small></div><div class="m">' +
+          (h.libur && h.shift.length ? '<span class="lbr-mark">🎌 ' + esc(h.libur) + ' — tetap dinas sesuai jadwal</span>' : '') +
           (h.shift.length ? h.shift.map(s => '<b>' + esc(s.nama) + '</b><span>' + esc(s.jam) + '</span>').join('<br>') : '<b style="color:var(--muted)">' + esc(h.raw === 'C' ? 'Cuti' : h.ket || (h.raw === 'L' || h.raw === 'LN' ? 'Libur' : '—')) + '</b>') + (h.tukar ? '<span class="tk-mark">⇄ tukar dengan ' + esc(h.tukar.dengan) + ' (' + esc(h.tukar.sebelum) + ' → ' + esc(h.tukar.sesudah) + ')</span>' : '') + '</div>' +
           (h.shift.length ? h.shift.map(s => '<span class="kode" style="background:' + (WARNA[s.kode] || '#0b5d3b') + '">' + esc(s.kode) + '</span>').join('') : '<span class="kode" style="background:' + (h.raw === 'C' ? WARNA.C : '#cbd5e1') + '">' + esc(h.raw === 'C' ? 'C' : 'L') + '</span>') + '</div>').join('');
       const el = document.querySelector('.list-item.today'); if (el) el.scrollIntoView({ block: 'center' });
