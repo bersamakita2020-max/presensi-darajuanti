@@ -6,7 +6,7 @@
   const app = $('#app');
   const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const LS = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } }, del: k => { try { localStorage.removeItem(k); } catch (e) { } } };
-  const S = { token: LS.get('dj_token'), device: null, info: null, offset: 0, gps: null, gpsErr: '', beranda: null, watch: null, timers: [], installEvt: null, sandiLogin: '' };
+  const S = { pantau: LS.get('dj_pantau') === '1', token: LS.get('dj_token'), device: null, info: null, offset: 0, gps: null, gpsErr: '', beranda: null, watch: null, timers: [], installEvt: null, sandiLogin: '' };
   const pad = n => (n < 10 ? '0' : '') + n;
   const now = () => Date.now() + S.offset;
   const wib = ms => new Date(ms + 7 * 3600000);
@@ -24,6 +24,7 @@
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
     kal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>',
     riw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
+    mon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>',
     user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
     ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
@@ -58,7 +59,7 @@
       throw e;
     }
   }
-  function keluarLokal() { S.token = null; LS.del('dj_token'); S.beranda = null; if (S.watch !== null) { navigator.geolocation.clearWatch(S.watch); S.watch = null; } }
+  function keluarLokal() { S.token = null; LS.del('dj_token'); S.beranda = null; S.pantau = false; S.pt = null; LS.del('dj_pantau'); if (S.watch !== null) { navigator.geolocation.clearWatch(S.watch); S.watch = null; } }
   // ---------- GPS ----------
   function jarakKe(lat, lng) {
     const g = S.info && S.info.geo; if (!g) return null;
@@ -103,12 +104,13 @@
     clearTimers(); closeSheet();
     const [v, arg] = location.hash.replace(/^#\//, '').split('/');
     if (!S.token && v !== 'login') return viewLogin();
-    ({ login: viewLogin, aktivasi: viewAktivasi, beranda: viewBeranda, scan: () => viewScan(arg || 'MASUK'), ajukan: () => viewAjukan(arg || 'IZIN'), jadwal: () => viewJadwal(), tukar: () => (arg === 'baru' ? viewTukarBaru() : viewTukar()), riwayat: () => viewRiwayat(), profil: viewProfil, hasil: viewHasilTerakhir }[v] || viewBeranda)();
+    ({ login: viewLogin, aktivasi: viewAktivasi, beranda: viewBeranda, scan: () => viewScan(arg || 'MASUK'), ajukan: () => viewAjukan(arg || 'IZIN'), jadwal: () => viewJadwal(), tukar: () => (arg === 'baru' ? viewTukarBaru() : viewTukar()), riwayat: () => viewRiwayat(), pantau: () => viewPantau(arg), profil: viewProfil, hasil: viewHasilTerakhir }[v] || viewBeranda)();
     window.scrollTo(0, 0);
   }
   function nav(aktif) {
     const b = (k, ic, t) => '<button data-go="' + k + '" class="' + (aktif === k ? 'on' : '') + '">' + I[ic] + '<span>' + t + '</span></button>';
-    return '<nav class="nav">' + b('beranda', 'home', 'Beranda') + b('jadwal', 'kal', 'Jadwal') + b('riwayat', 'riw', 'Riwayat') + b('profil', 'user', 'Profil') + '</nav>';
+    // TAHAP 8: tab Monitoring hanya untuk akun ber-akses pantau (Kepala Puskesmas); server lama tidak mengirim 'pantau' → tab tidak tampil
+    return '<nav class="nav' + (S.pantau ? ' n5' : '') + '">' + b('beranda', 'home', 'Beranda') + b('jadwal', 'kal', 'Jadwal') + (S.pantau ? b('pantau', 'mon', 'Monitoring') : '') + b('riwayat', 'riw', 'Riwayat') + b('profil', 'user', 'Profil') + '</nav>';
   }
   app.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, g.dataset.arg); } });
   function appbar(judul, kembali) { return '<div class="appbar"><button class="icon-btn" data-go="' + (kembali || 'beranda') + '" aria-label="Kembali">' + I.back + '</button><h2>' + esc(judul) + '</h2></div>'; }
@@ -175,6 +177,7 @@
     try {
       const r = await api('beranda', {});
       S.beranda = r; S.offset = r.waktu_server - Date.now(); if (r.geo) S.info = Object.assign(S.info || {}, { geo: r.geo }); S.profil = r.profil;
+      if (!!r.pantau !== S.pantau) { S.pantau = !!r.pantau; if (S.pantau) LS.set('dj_pantau', '1'); else LS.del('dj_pantau'); } // TAHAP 8
       if (location.hash.indexOf('beranda') >= 0 || location.hash === '' || location.hash === '#/') renderBeranda();
     } catch (e) { if (!S.beranda && S.token) app.innerHTML = '<div class="loading"><p>' + esc(e.message) + '</p><button class="btn sec" style="max-width:220px" onclick="location.reload()">Coba lagi</button></div>' + nav('beranda'); }
   }
@@ -507,6 +510,121 @@
   function pasangBulan(fn) {
     const geser = n => { const b = (fn === viewJadwal ? S.blnJadwal : S.blnRiwayat).split('-').map(Number); const d = new Date(Date.UTC(b[0], b[1] - 1 + n, 1)); fn(d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1)); };
     $('#b-prev').onclick = () => geser(-1); $('#b-next').onclick = () => geser(1);
+  }
+  // ---------- MONITORING KEPALA PUSKESMAS (TAHAP 8 · hanya baca; server memeriksa akses_viewer di setiap panggilan) ----------
+  const GELAR_CARI = ['dr', 'drg', 'drs', 'dra', 'ns', 'apt', 'bdn', 'hj', 'h', 'ir', 'prof', 'skm', 'skep', 'sked', 'ssttkeb', 'sst', 'sstr', 'strkeb', 'strkes', 'sgz', 'sfarm', 'skeb', 'stp', 'se', 'sh', 'ssos', 'spd', 'sap', 'skom', 'sip', 'mm', 'mkes', 'mkm', 'amd', 'amdkeb', 'amdkep', 'amdgz', 'amdak', 'amdfarm', 'amdkg', 'amdkl', 'amdrmik', 'amdtlm', 'amdrad', 'spog', 'spa', 'sppd', 'mph', 'msi'];
+  function normCari(s) {
+    s = String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const i = s.indexOf(','); if (i > 0) s = s.slice(0, i);
+    return s.split(/\s+/).map(w => w.replace(/[^a-z0-9]/g, '')).filter((w, k, a) => w && !(GELAR_CARI.indexOf(w) >= 0 && a.length > 1)).join('');
+  }
+  function cocokCari(x, q) {
+    const nq = String(q || '').toLowerCase().replace(/[^a-z0-9]/g, ''); if (!nq) return true;
+    const nn = normCari(q);
+    if (nn && normCari(x.nama).indexOf(nn) >= 0) return true;
+    if ((String(x.nama || '') + ' ' + (x.unit || '')).toLowerCase().replace(/[^a-z0-9]/g, '').indexOf(nq) >= 0) return true;
+    return /^\d+$/.test(nq) && String(x.nip || '').replace(/\D/g, '').indexOf(nq) >= 0;
+  }
+  function tglHariIni() { const d = wib(now()); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
+  function matikanPantau(pesan) { S.pantau = false; LS.del('dj_pantau'); if (pesan) toast(pesan, 'bad', 4500); go('beranda'); }
+  const PT_TAB = [['belum', 'Belum masuk'], ['telat', 'Terlambat'], ['isl', 'Izin/Sakit/TL'], ['cuti', 'Cuti'], ['akt', 'Aktivitas']];
+  async function viewPantau(tglArg) {
+    if (!S.pantau) return go('beranda');
+    const P = S.pt = S.pt || { tab: 'belum', q: '', lokasi: '', unit: '', ids: {}, idsQ: '' };
+    const hariIni = tglHariIni();
+    P.tgl = /^\d{4}-\d{2}-\d{2}$/.test(tglArg || '') && tglArg <= hariIni ? tglArg : (P.tgl && P.tgl <= hariIni ? P.tgl : hariIni);
+    app.innerHTML = '<div class="view pantau">' + '<div class="appbar"><h2 style="padding-left:6px;flex:1">Monitoring</h2><span class="tag info" title="Hanya melihat — tidak dapat mengubah data">HANYA BACA</span></div>' +
+      '<div class="pad"><div class="pt-flt"><label><span>Tanggal</span><input type="date" class="inp" id="pt-tgl" max="' + hariIni + '" value="' + P.tgl + '"></label><label><span>Lokasi</span><select class="inp" id="pt-lok"><option value="">Semua lokasi</option></select></label><label><span>Unit</span><select class="inp" id="pt-unit"><option value="">Semua unit</option></select></label></div>' +
+      '<div id="pt-tarik" class="pt-tarik">↓ Tarik untuk memuat ulang</div><div id="pt-isi"><div class="loading"><span class="spin d"></span>Memuat monitoring…</div></div></div></div>' + nav('pantau');
+    $('#pt-tgl').onchange = e => { P.tgl = e.target.value || hariIni; muatPantau(true); };
+    $('#pt-lok').onchange = e => { P.lokasi = e.target.value; P.unit = ''; muatPantau(true); };
+    $('#pt-unit').onchange = e => { P.unit = e.target.value; renderPantau(); };
+    pasangTarik(() => muatPantau(true));
+    await muatPantau(false);
+    S.timers.push(setInterval(() => { if (document.visibilityState === 'visible' && location.hash.indexOf('pantau') >= 0 && P.tgl === tglHariIni()) muatPantau(false, true); }, Math.max(30, (P.m && P.m.refresh) || 60) * 1000));
+  }
+  async function muatPantau(segar, diam) {
+    const P = S.pt, seq = P.seq = (P.seq || 0) + 1;
+    if (!diam && P.m) $('#pt-isi').classList.add('memuat');
+    try {
+      const m = await api('pantau', { tanggal: P.tgl, lokasi: P.lokasi, segar: !!segar });
+      if (seq !== P.seq || location.hash.indexOf('pantau') < 0) return;
+      P.m = m; renderPantau();
+    } catch (e) {
+      if (e.kode === 'AKSI' || e.kode === 'AKSES') return matikanPantau(e.kode === 'AKSI' ? 'Server belum mendukung Monitoring di aplikasi ini.' : e.message);
+      if (location.hash.indexOf('pantau') < 0) return;
+      const el = $('#pt-isi'); if (el) { el.classList.remove('memuat'); if (!P.m || !diam) el.innerHTML = '<div class="note bad"><span class="ni">!</span><div>' + esc(e.message) + '</div></div>' + (P.m ? '' : '<button class="btn sec" id="pt-ulang">Coba lagi</button>'); const u = $('#pt-ulang'); if (u) u.onclick = () => muatPantau(true); }
+    }
+  }
+  function renderPantau() {
+    const P = S.pt, m = P.m, k = m.kpi, el = $('#pt-isi'); if (!el) return;
+    const fk = document.activeElement && document.activeElement.id === 'pt-q' ? document.activeElement.selectionStart : null;
+    const lok = $('#pt-lok'), un = $('#pt-unit');
+    if (lok) { lok.innerHTML = '<option value="">Semua lokasi</option>' + (m.lokasi || []).map(l => '<option value="' + esc(l.kode) + '"' + (P.lokasi === l.kode ? ' selected' : '') + '>' + esc(l.nama) + '</option>').join(''); lok.parentNode.style.display = (m.lokasi || []).length > 1 ? '' : 'none'; }
+    const units = Array.from(new Set([].concat(m.belum, m.terlambat_list || [], m.isl_list || [], m.cuti_list || [], (m.unit || []).map(u => ({ unit: u.unit }))).map(x => x.unit).filter(x => x && x !== '-'))).sort();
+    if (un) un.innerHTML = '<option value="">Semua unit</option>' + units.map(u => '<option' + (P.unit === u ? ' selected' : '') + '>' + esc(u) + '</option>').join('');
+    const fU = x => !P.unit || x.unit === P.unit;
+    const L = { belum: m.belum.filter(fU), telat: (m.terlambat_list || []).filter(fU), isl: (m.isl_list || []).filter(fU), cuti: (m.cuti_list || []).filter(fU), akt: (m.aktivitas || []).filter(fU) };
+    const kp = (j, n, sub, c, tab) => '<button class="pt-kpi" data-tab="' + tab + '" style="--c:' + c + '"><small>' + j + '</small><b>' + n + '</b><span>' + sub + '</span></button>';
+    const masuk = k.hadir + k.terlambat;
+    el.classList.remove('memuat');
+    el.innerHTML = (m.libur ? '<div class="note info"><span class="ni">' + I.kal + '</span><div>' + esc(m.tanggal_teks) + ': <b>' + esc(m.libur.nama || 'Hari libur') + '</b></div></div>' : '') +
+      '<p class="pt-sub">' + esc(m.tanggal_teks) + (m.lokasi_nama ? ' · ' + esc(m.lokasi_nama) : '') + ' · diperbarui ' + esc(m.diperbarui) + ' WIB' + (P.tgl === tglHariIni() ? ' · otomatis tiap ' + m.refresh + ' dtk' : '') + '</p>' +
+      '<div class="pt-kpis">' + kp('Terjadwal', k.terjadwal, 'pegawai berdinas', '#1d4e89', 'belum') + kp('Sudah masuk', masuk, k.terjadwal ? Math.round(masuk / k.terjadwal * 100) + '% · tepat ' + k.hadir : '—', '#12873f', 'akt') +
+      kp('Terlambat', k.terlambat, 'Σ ' + esc(m.kpi_teks || '0 menit'), '#c98a00', 'telat') + kp('Belum masuk', m.belum_total !== undefined ? m.belum_total : m.belum.length, 'belum ' + k.belum + ' · TK ' + k.TK, '#d64545', 'belum') +
+      kp('Izin · Sakit · TL', k.I + k.S + k.TL, 'I ' + k.I + ' · S ' + k.S + ' · TL ' + k.TL, '#0e7c86', 'isl') + kp('Cuti', k.C || 0, 'sesuai jadwal', '#7c3aed', 'cuti') + '</div>' +
+      '<div class="pt-tabs" role="tablist">' + PT_TAB.map(t => '<button data-tab="' + t[0] + '" class="' + (P.tab === t[0] ? 'on' : '') + '">' + t[1] + ' <i>' + L[t[0]].length + '</i></button>').join('') + '</div>' +
+      '<div class="pt-cari"><input class="inp" id="pt-q" placeholder="Cari nama, NIP/NIK, unit…" value="' + esc(P.q) + '" autocomplete="off" inputmode="search"><button type="button" id="pt-x" aria-label="Hapus pencarian" style="visibility:' + (P.q ? 'visible' : 'hidden') + '">×</button></div>' +
+      '<div class="pt-hit" id="pt-hit"></div><div id="pt-list"></div>' +
+      '<div class="sec-title">Unduh</div><button class="btn sec" id="pt-rekap">Rekap bulanan ' + esc(BULAN[+m.bulan.slice(5) - 1] + ' ' + m.bulan.slice(0, 4)) + ' (PDF)</button>' +
+      '<p style="font-size:12px;color:var(--muted);margin:12px 0 4px">Mode pantau: hanya melihat, NIP/NIK disamarkan. Koreksi & persetujuan tetap dilakukan admin di panel admin.</p>';
+    el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { P.tab = b.dataset.tab; renderPantau(); });
+    const q = $('#pt-q');
+    q.oninput = () => { P.q = q.value.trim(); cariNipPantau(); isiDaftarPantau(L); $('#pt-x').style.visibility = P.q ? 'visible' : 'hidden'; };
+    $('#pt-x').onclick = () => { q.value = ''; P.q = ''; isiDaftarPantau(L); $('#pt-x').style.visibility = 'hidden'; q.focus(); };
+    $('#pt-rekap').onclick = unduhRekapPantau;
+    isiDaftarPantau(L);
+    if (fk !== null) { q.focus(); try { q.setSelectionRange(fk, fk); } catch (e) { } }
+  }
+  function cariNipPantau() {
+    const P = S.pt, nq = P.q.replace(/\D/g, '');
+    if (nq.length < 4 || P.idsQ === nq) return;
+    clearTimeout(P.tq); P.tq = setTimeout(async () => { try { const r = await api('pantau.cari', { q: nq }); P.ids = {}; r.ids.forEach(x => P.ids[x] = 1); P.idsQ = nq; if (location.hash.indexOf('pantau') >= 0) renderPantau(); } catch (e) { } }, 350);
+  }
+  function isiDaftarPantau(L) {
+    const P = S.pt, m = P.m, el = $('#pt-list'); if (!el) return;
+    const nq = P.q.replace(/\D/g, '');
+    const cocok = x => cocokCari(x, P.q) || (nq.length >= 4 && P.idsQ === nq && !!P.ids[x.id]);
+    const semua = L[P.tab], rows = semua.filter(cocok);
+    $('#pt-hit').innerHTML = P.q ? '<b>' + rows.length + '</b> dari ' + semua.length : semua.length + ' ' + (P.tab === 'akt' ? 'kejadian' : 'pegawai');
+    const sub = x => esc(x.unit || '') + (x.nip ? ' · ' + esc(x.nip) : '') + ((m.lokasi || []).length > 1 && x.lokasi ? ' · 📍 ' + esc(x.lokasi) : '');
+    const baris = {
+      belum: x => '<div class="list-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + sub(x) + '<br>' + esc(x.shift) + ' · batas ' + esc(x.jendela) + '</span></div><span class="tag ' + (x.status === 'BELUM HADIR' ? 'mut' : 'bad') + '">' + (x.status === 'BELUM HADIR' ? 'BELUM' : 'TK') + '</span></div>',
+      telat: x => '<div class="list-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + sub(x) + '<br>' + esc(x.shift) + ' · masuk ' + esc(String(x.masuk || '').replace(':', '.')) + '</span></div><span class="tag warn">' + x.menit + ' mnt</span></div>',
+      isl: x => '<div class="list-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + sub(x) + (x.rentang ? '<br>' + esc(x.rentang) : '') + '</span></div><span class="tag info">' + esc(x.jenis) + '</span></div>',
+      cuti: x => '<div class="list-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + sub(x) + '</span></div><span class="tag ung">CUTI</span></div>',
+      akt: x => '<div class="list-item"><div class="d"><b style="font-size:15px">' + esc(String(x.waktu).replace(':', '.')) + '</b></div><div class="m"><b>' + esc(x.nama) + '</b><span>' + esc(x.unit || '') + ' · ' + esc(x.jenis) + (x.shift ? ' · ' + esc(x.shift) : '') + '</span></div><span class="tag ' + (!x.ok ? 'bad' : /TERLAMBAT|PULANG_AWAL/.test(x.status) ? 'warn' : 'ok') + '">' + esc(!x.ok ? 'DITOLAK' : String(x.status).replace(/_/g, ' ')) + (x.lama ? ' ' + x.lama + 'm' : '') + '</span></div>'
+    };
+    const kosong = { belum: 'Semua yang terjadwal sudah presensi masuk.', telat: 'Tidak ada yang terlambat.', isl: 'Tidak ada izin/sakit/TL.', cuti: 'Tidak ada yang cuti.', akt: 'Belum ada presensi.' };
+    el.innerHTML = rows.length ? rows.map(baris[P.tab]).join('') : '<p class="pt-kosong">' + (P.q && semua.length ? 'Tidak ada nama yang cocok dengan “' + esc(P.q) + '”.' : kosong[P.tab]) + '</p>';
+  }
+  async function unduhRekapPantau() {
+    const b = $('#pt-rekap'), t0 = b.textContent; b.disabled = true; b.innerHTML = '<span class="spin d"></span> Menyiapkan PDF…';
+    try {
+      const r = await api('pantau.rekap', { bulan: S.pt.m.bulan, lokasi: S.pt.lokasi }, { timeout: 90000, ulang: 0 });
+      const bin = atob(r.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u8], { type: r.mime })), a = document.createElement('a'); a.href = url; a.download = r.nama; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+      toast('PDF diunduh: ' + r.nama, 'ok');
+    } catch (e) { if (e.kode === 'AKSI' || e.kode === 'AKSES') return matikanPantau(e.message); toast(e.message, 'bad', 5000); }
+    b.disabled = false; b.textContent = t0;
+  }
+  /** Tarik layar ke bawah (di puncak halaman) untuk memuat ulang. */
+  function pasangTarik(fn) {
+    let y0 = null, dy = 0; const ind = $('#pt-tarik');
+    const v = $('.view.pantau'); if (!v) return;
+    v.addEventListener('touchstart', e => { y0 = window.scrollY <= 0 ? e.touches[0].clientY : null; dy = 0; }, { passive: true });
+    v.addEventListener('touchmove', e => { if (y0 === null) return; dy = e.touches[0].clientY - y0; if (dy > 10 && ind) { ind.style.height = Math.min(56, dy / 2) + 'px'; ind.classList.toggle('siap', dy > 90); ind.textContent = dy > 90 ? '↻ Lepas untuk memuat ulang' : '↓ Tarik untuk memuat ulang'; } }, { passive: true });
+    v.addEventListener('touchend', () => { if (y0 !== null && dy > 90) { if (ind) ind.textContent = 'Memuat…'; Promise.resolve(fn()).then(() => { if (ind) { ind.style.height = '0'; ind.classList.remove('siap'); } }); } else if (ind) { ind.style.height = '0'; } y0 = null; dy = 0; });
   }
   // ---------- RIWAYAT ----------
   async function viewRiwayat(bulanArg) {

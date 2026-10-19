@@ -199,3 +199,15 @@ textarea.inp{min-height:92px;resize:vertical}
 .list-item.libur .d b{color:#b42323}
 .lbr-mark{display:block;font-size:11.5px;font-weight:600;color:#a32b2b;background:#fdeaea;border-radius:6px;padding:2px 7px;margin:0 0 4px;width:fit-content}
 .note.lbr{background:#fdf2f2;border-color:#f3c7c7}
+
+/* TAHAP 8: Monitoring Kepala Puskesmas (hanya baca) */
+.nav.n5{grid-template-columns:repeat(5,1fr)}.nav.n5 button{font-size:10.5px}
+.pt-flt{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}.pt-flt label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--muted);font-weight:600}.pt-flt label:first-child{grid-column:1/-1}.pt-flt .inp{min-height:42px;padding:8px 10px;font-size:14px}
+.pt-tarik{height:0;overflow:hidden;text-align:center;font-size:12.5px;color:var(--muted);transition:height .15s;display:flex;align-items:center;justify-content:center}.pt-tarik.siap{color:var(--hijau);font-weight:700}
+.pt-sub{font-size:12.5px;color:var(--muted);margin:4px 0 10px}
+.pt-kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.pt-kpi{text-align:left;background:#fff;border-radius:14px;padding:10px 12px;box-shadow:0 2px 8px rgba(11,37,69,.06);border-left:4px solid var(--c)}.pt-kpi small{display:block;font-size:11.5px;color:var(--muted);font-weight:600}.pt-kpi b{display:block;font-size:24px;color:var(--c);line-height:1.15}.pt-kpi span{font-size:11.5px;color:var(--muted)}
+.pt-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;scrollbar-width:none}.pt-tabs button{flex:none;padding:8px 12px;border-radius:999px;background:#e7ecf2;font-size:13px;font-weight:700;color:var(--muted)}.pt-tabs button.on{background:var(--hijau);color:#fff}.pt-tabs button i{font-style:normal;opacity:.8;font-weight:600}
+.pt-cari{position:relative;margin-bottom:6px}.pt-cari .inp{padding-right:44px}.pt-cari button{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;font-size:20px;color:var(--muted);background:#eef1f5}
+.pt-hit{font-size:12.5px;color:var(--muted);margin:0 2px 8px}.pt-kosong{color:var(--muted);text-align:center;padding:18px 0}
+#pt-isi.memuat{opacity:.55;transition:opacity .2s}
