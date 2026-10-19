@@ -271,24 +271,27 @@
       '<div class="status-band bad" style="font-size:15px;line-height:1.4">' + esc(pesan) + '</div></div><div class="pad"><button class="btn pri" data-go="scan" data-arg="' + jenis + '" style="margin-bottom:10px">Coba lagi</button><button class="btn sec" data-go="beranda">Kembali ke beranda</button>' +
       '<p style="font-size:12.5px;color:var(--muted);text-align:center;margin-top:14px">Percobaan yang gagal tercatat. Bila ada kendala, hubungi admin untuk koreksi.</p></div></div>' + nav('beranda');
   }
-  // ---------- AJUKAN IZIN/SAKIT/TL (TAHAP 3: dokumen hanya wajib bila > N hari, termasuk yang bersambung; TL selalu) ----------
+  // ---------- AJUKAN IZIN/SAKIT/TL (TAHAP 3: dokumen izin/sakit hanya wajib bila > N hari, termasuk yang bersambung)
+  // TAHAP 7: TL tanpa unggahan (cukup keterangan ≥ 10 karakter); pengajuan ≤ X hari (digabung yang bersambung) disetujui OTOMATIS ----------
   function viewAjukan(jenis) {
     if (['IZIN', 'SAKIT', 'TL'].indexOf(jenis) < 0) jenis = 'IZIN';
     mulaiGps();
     const t = wib(now()), hari = t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate());
     const ambang = (S.info && S.info.bukti_wajib_lebih_hari !== undefined) ? S.info.bukti_wajib_lebih_hari : 3;
     const lbl = { IZIN: 'Surat/keterangan izin', SAKIT: 'Surat keterangan sakit', TL: 'Surat tugas' }[jenis];
+    const ketMin = (S.info && S.info.tl_ket_min) || 10, otoMaks = (S.info && S.info.auto_setuju_maks_hari !== undefined) ? +S.info.auto_setuju_maks_hari : 0; // server lama (tanpa info) → anggap tidak ada persetujuan otomatis
+    const otoJenis = (S.info && S.info.auto_setuju_jenis) || [], otoOn = otoMaks > 0 && otoJenis.indexOf(jenis) >= 0;
     const ph = { IZIN: 'Mis. keperluan keluarga mendesak…', SAKIT: 'Mis. demam, istirahat sesuai anjuran dokter…', TL: 'Lokasi & kegiatan tugas lapangan…' }[jenis];
     const m0 = S.ajTgl && S.ajTgl.m >= hari ? S.ajTgl.m : hari, s0 = S.ajTgl && S.ajTgl.s >= m0 ? S.ajTgl.s : m0;
     app.innerHTML = '<div class="view">' + appbar('Pengajuan Ketidakhadiran') + '<form class="pad" id="f-aj">' +
       '<div class="seg">' + ['IZIN', 'SAKIT', 'TL'].map(j => '<button type="button" data-go="ajukan" data-arg="' + j + '" class="' + (j === jenis ? 'on' : '') + '">' + (j === 'TL' ? 'TL' : j.charAt(0) + j.slice(1).toLowerCase()) + '</button>').join('') + '</div>' +
       '<div class="card"><div class="row2"><label class="f"><span>Tanggal mulai</span><input class="inp" type="date" name="m" value="' + m0 + '" required></label><label class="f"><span>Tanggal selesai</span><input class="inp" type="date" name="s" value="' + s0 + '" required></label></div>' +
-      '<label class="f"><span>Keterangan</span><textarea class="inp" name="k" maxlength="500" required placeholder="' + ph + '"></textarea></label>' +
-      '<div id="bukti-info" class="bukti-info">' + (jenis === 'TL' ? '' : '<span class="spin d" style="width:14px;height:14px;border-width:2px"></span> Memeriksa aturan dokumen…') + '</div>' +
-      '<div id="up-wrap" class="' + (jenis === 'TL' ? '' : 'hidden') + '"><label class="f" style="margin:0"><span>' + lbl + ' · <b style="color:var(--merah)">wajib</b></span></label><div class="upload"><div id="file-chip"></div><div class="row2"><label class="btn sec" style="min-height:46px;font-size:14px">' + I.cam + ' Kamera<input type="file" accept="image/*" capture="environment" class="hidden" id="in-cam"></label><label class="btn sec" style="min-height:46px;font-size:14px">' + I.file + ' Galeri/PDF<input type="file" accept="image/jpeg,image/png,application/pdf" class="hidden" id="in-file"></label></div><p style="font-size:12px;color:var(--muted);margin:8px 0 0">JPG/PNG/PDF, maks. ' + Math.round(((S.info && S.info.bukti_maks_kb) || 2048) / 1024) + ' MB. Foto dikompres otomatis.</p></div></div></div>' +
+      '<label class="f"><span>' + (jenis === 'TL' ? 'Keterangan lokasi & kegiatan · <b style="color:var(--merah)">wajib</b>, min. ' + ketMin + ' karakter' : 'Keterangan') + '</span><textarea class="inp" name="k" maxlength="500" required' + (jenis === 'TL' ? ' minlength="' + ketMin + '"' : '') + ' placeholder="' + ph + '"></textarea>' + (jenis === 'TL' ? '<small id="k-hit" style="display:block;text-align:right;font-size:12px;color:var(--muted)">0/' + ketMin + '</small>' : '') + '</label>' +
+      '<div id="bukti-info" class="bukti-info"><span class="spin d" style="width:14px;height:14px;border-width:2px"></span> Memeriksa aturan ' + (jenis === 'TL' ? 'pengajuan' : 'dokumen') + '…</div><div id="oto-info" class="bukti-info hidden"></div>' +
+      '<div id="up-wrap" class="hidden"><label class="f" style="margin:0"><span>' + lbl + ' · <b style="color:var(--merah)">wajib</b></span></label><div class="upload"><div id="file-chip"></div><div class="row2"><label class="btn sec" style="min-height:46px;font-size:14px">' + I.cam + ' Kamera<input type="file" accept="image/*" capture="environment" class="hidden" id="in-cam"></label><label class="btn sec" style="min-height:46px;font-size:14px">' + I.file + ' Galeri/PDF<input type="file" accept="image/jpeg,image/png,application/pdf" class="hidden" id="in-file"></label></div><p style="font-size:12px;color:var(--muted);margin:8px 0 0">JPG/PNG/PDF, maks. ' + Math.round(((S.info && S.info.bukti_maks_kb) || 2048) / 1024) + ' MB. Foto dikompres otomatis.</p></div></div></div>' +
       '<div class="card" style="padding:8px 16px"><div id="gps-aj">' + gpsAjukan() + '</div><div class="chk ok"><span class="ci">✓</span><b>HP terdaftar</b><span>waktu server ' + jamTeks(now()) + ' WIB</span></div></div>' +
-      '<button class="btn pri" id="b-aj">Kirim Pengajuan</button><p style="font-size:12.5px;color:var(--muted);text-align:center">Pengajuan berlaku setelah disetujui admin. ' + (jenis === 'TL' ? 'Tugas lapangan selalu disertai surat tugas.' : 'Izin/sakit sampai ' + ambang + ' hari tidak perlu dokumen; lebih dari ' + ambang + ' hari (termasuk yang bersambung dengan pengajuan sebelumnya/sesudahnya) wajib dokumen.') + '</p></form></div>' + nav('beranda');
-    let bukti = null, wajib = jenis === 'TL', cekNo = 0, tCek = null;
+      '<button class="btn pri" id="b-aj">Kirim Pengajuan</button><p style="font-size:12.5px;color:var(--muted);text-align:center">' + (otoOn ? 'Pengajuan sampai ' + otoMaks + ' hari (termasuk yang bersambung) disetujui otomatis oleh sistem; lebih lama menunggu persetujuan admin. ' : 'Pengajuan berlaku setelah disetujui admin. ') + (jenis === 'TL' ? 'Tugas lapangan tidak perlu unggah surat — cukup keterangan lokasi & kegiatan.' : 'Izin/sakit sampai ' + ambang + ' hari tidak perlu dokumen; lebih dari ' + ambang + ' hari (termasuk yang bersambung dengan pengajuan sebelumnya/sesudahnya) wajib dokumen.') + '</p></form></div>' + nav('beranda');
+    let bukti = null, wajib = false, cekNo = 0, tCek = null;
     const tampilUnggah = (w, pesan, kelas) => {
       app.querySelectorAll('.aj-bentrok').forEach(x => x.remove());
       wajib = w; $('#up-wrap').classList.toggle('hidden', !w);
@@ -296,16 +299,16 @@
       bi.className = 'bukti-info ' + (kelas || (w ? 'wajib' : 'bebas'));
       bi.innerHTML = pesan ? (w ? '📎 ' : '✓ ') + esc(pesan) : '';
     };
-    if (jenis === 'TL') tampilUnggah(true, 'Tugas Lapangan wajib disertai surat tugas.');
+    const tampilOto = (r) => { const oi = $('#oto-info'); if (!oi) return; if (!r || !r.pesan_otomatis) { oi.classList.add('hidden'); return; } oi.className = 'bukti-info ' + (r.otomatis ? 'bebas' : 'wajib'); oi.innerHTML = (r.otomatis ? '⚡ ' : '⏳ ') + esc(r.pesan_otomatis); };
+    if (jenis === 'TL') { const k = $('#f-aj').k, hit = $('#k-hit'); k.oninput = () => { const n = k.value.trim().length; hit.textContent = n + '/' + ketMin; hit.style.color = n >= ketMin ? 'var(--hijau)' : 'var(--muted)'; }; }
     const cekAturan = () => {
-      if (jenis === 'TL') return;
       const f = $('#f-aj'); if (!f) return;
       const m = f.m.value, s = f.s.value || m; S.ajTgl = { m, s };
       if (!m || s < m) return tampilUnggah(false, 'Periksa tanggal.', 'bebas');
       const no = ++cekNo;
       api('ajukan.cek', { jenis, tgl_mulai: m, tgl_selesai: s }).then(r => {
         if (no !== cekNo) return;
-        tampilUnggah(r.wajib_bukti, r.pesan);
+        tampilUnggah(jenis === 'TL' && r.ket_min ? false : r.wajib_bukti, r.pesan); // server lama (tanpa ket_min) masih mewajibkan surat tugas TL tampilOto(r);
         const bi = $('#bukti-info'); if (bi && r.bentrok) bi.insertAdjacentHTML('afterend', '<div class="bukti-info wajib aj-bentrok">⚠ ' + esc(r.bentrok) + ' Ubah tanggal atau batalkan pengajuan lama.</div>');
       }).catch(e => { if (no === cekNo && e.kode !== 'SESI') tampilUnggah(false, e.message, 'bebas'); });
     };
@@ -328,6 +331,7 @@
     $('#f-aj').onsubmit = async e => {
       e.preventDefault(); const f = e.target, b = $('#b-aj');
       if (f.s.value < f.m.value) return toast('Tanggal selesai sebelum tanggal mulai.', 'bad');
+      if (jenis === 'TL' && f.k.value.trim().length < ketMin) return toast('Keterangan Tugas Lapangan minimal ' + ketMin + ' karakter (lokasi & kegiatan).', 'bad', 5000);
       if (wajib && !bukti) return toast(jenis === 'TL' ? 'Surat tugas wajib diunggah.' : 'Dokumen pendukung wajib diunggah untuk izin/sakit lebih dari ' + ambang + ' hari.', 'bad', 5000);
       let pos; try { pos = await posisiSegar(); } catch (er) { return toast(er.message, 'bad', 5000); }
       const data = { jenis, tgl_mulai: f.m.value, tgl_selesai: f.s.value, keterangan: f.k.value, lat: pos.lat, lng: pos.lng, akurasi: pos.akurasi, request_id: rid() };
@@ -339,7 +343,7 @@
         try {
           const r = await api('ajukan', data, { timeout: 60000 });
           S.beranda = null; S.ajTgl = null;
-          app.innerHTML = '<div class="view"><div class="hasil ok"><div class="big">' + I.ok + '</div><h2>Pengajuan ' + esc(jenis) + ' terkirim</h2><div class="tgl" style="margin-top:6px">' + esc(f.m.value) + (f.s.value !== f.m.value ? ' s.d. ' + esc(f.s.value) : '') + ' · ' + esc(r.waktu_server) + ' WIB</div><div class="status-band info">MENUNGGU PERSETUJUAN<small>Lokasi tercatat ' + jarakTeks(r.jarak) + ' dari Puskesmas' + (r.dalam_area ? '' : ' (di luar area — diizinkan)') + '</small></div></div><div class="pad"><div class="card dl"><div><span>ID pengajuan</span><b>' + esc(r.id_pengajuan) + '</b></div><div><span>Dokumen</span><b>' + (r.bukti ? esc(bukti.nama) : 'Tidak dilampirkan (tidak wajib)') + '</b></div>' + (r.hari_berturut > 1 ? '<div><span>Lama (termasuk bersambung)</span><b>' + r.hari_berturut + ' hari</b></div>' : '') + '</div><button class="btn pri" data-go="beranda">Selesai</button></div></div>' + nav('beranda');
+          app.innerHTML = '<div class="view"><div class="hasil ok"><div class="big">' + I.ok + '</div><h2>Pengajuan ' + esc(jenis) + (r.otomatis ? ' disetujui' : ' terkirim') + '</h2><div class="tgl" style="margin-top:6px">' + esc(f.m.value) + (f.s.value !== f.m.value ? ' s.d. ' + esc(f.s.value) : '') + ' · ' + esc(r.waktu_server) + ' WIB</div>' + (r.otomatis ? '<div class="status-band ok">DISETUJUI OTOMATIS<small>' + esc(r.alasan_otomatis || 'Disetujui otomatis oleh sistem.') + ' · ' : '<div class="status-band info">MENUNGGU PERSETUJUAN<small>') + 'Lokasi tercatat ' + jarakTeks(r.jarak) + ' dari Puskesmas' + (r.dalam_area ? '' : ' (di luar area — diizinkan)') + '</small></div></div><div class="pad"><div class="card dl"><div><span>ID pengajuan</span><b>' + esc(r.id_pengajuan) + '</b></div><div><span>Dokumen</span><b>' + (r.bukti ? esc(bukti.nama) : (jenis === 'TL' ? 'Tidak perlu (TL cukup keterangan)' : 'Tidak dilampirkan (tidak wajib)')) + '</b></div>' + (r.hari_berturut > 1 ? '<div><span>Lama (termasuk bersambung)</span><b>' + r.hari_berturut + ' hari</b></div>' : '') + '</div><button class="btn pri" data-go="beranda">Selesai</button></div></div>' + nav('beranda');
           return;
         } catch (er) {
           b.disabled = false; b.textContent = 'Kirim Pengajuan';
