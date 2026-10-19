@@ -8,5 +8,5 @@ window.PRESENSI_CONFIG = {
   NAMA_INSTANSI: 'UPTD Puskesmas Dara Juanti',
   KABUPATEN: 'Kabupaten Sintang',
   LOGO: 'assets/logo-puskesmas.png', // ganti berkas ini untuk mengganti logo di aplikasi pegawai
-  VERSI: '1.4.0'
+  VERSI: '1.5.0'
 };

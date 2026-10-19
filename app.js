@@ -64,9 +64,9 @@
     const g = S.info && S.info.geo; if (!g) return null;
     const R = 6371000, r = Math.PI / 180, dLat = (g.lat - lat) * r, dLng = (g.lng - lng) * r;
     const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat * r) * Math.cos(g.lat * r) * Math.sin(dLng / 2) ** 2;
-    let d = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)), rad = g.radius;
-    (g.lain || []).forEach(l => { const dl = 2 * R * Math.asin(Math.sqrt(Math.sin((l.lat - lat) * r / 2) ** 2 + Math.cos(lat * r) * Math.cos(l.lat * r) * Math.sin((l.lng - lng) * r / 2) ** 2)); if (dl - (l.radius || rad) < d - rad) { d = dl; rad = l.radius || rad; } });
-    return { jarak: d, radius: rad, dalam: d <= rad };
+    let d = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)), rad = g.radius, nm = g.nama || 'Puskesmas';
+    (g.lain || []).forEach(l => { const dl = 2 * R * Math.asin(Math.sqrt(Math.sin((l.lat - lat) * r / 2) ** 2 + Math.cos(lat * r) * Math.cos(l.lat * r) * Math.sin((l.lng - lng) * r / 2) ** 2)); if (dl - (l.radius || rad) < d - rad) { d = dl; rad = l.radius || rad; nm = l.nama || nm; } });
+    return { jarak: d, radius: rad, dalam: d <= rad, nama: nm };
   }
   function mulaiGps() {
     if (!('geolocation' in navigator)) { S.gpsErr = 'Perangkat tidak mendukung GPS.'; return; }
@@ -85,9 +85,11 @@
     if (S.gpsErr) return '<div class="area err"><i class="dot"></i><div>' + esc(S.gpsErr) + '<small>Aktifkan lokasi</small></div></div>';
     if (!S.gps) return '<div class="area wait"><i class="dot"></i><div>Mencari lokasi…<small>GPS</small></div></div>';
     const j = jarakKe(S.gps.lat, S.gps.lng); if (!j) return '';
-    return j.dalam ? '<div class="area in"><i class="dot"></i><div>DALAM AREA<small>±' + jarakTeks(j.jarak) + ' dari titik</small></div></div>'
-      : '<div class="area out"><i class="dot"></i><div>DI LUAR AREA<small>±' + jarakTeks(j.jarak) + ' · Izin/Sakit/TL boleh</small></div></div>';
+    return j.dalam ? '<div class="area in"><i class="dot"></i><div>DALAM AREA<small>' + esc(j.nama) + ' · ±' + jarakTeks(j.jarak) + '</small></div></div>'
+      : '<div class="area out"><i class="dot"></i><div>DI LUAR AREA<small>' + esc(namaLokasi()) + ' ±' + jarakTeks(j.jarak) + ' · Izin/Sakit/TL boleh</small></div></div>';
   }
+  // TAHAP 5: nama lokasi induk pegawai (Puskesmas induk / Polindes)
+  function namaLokasi() { const b = S.beranda && S.beranda.lokasi, g = S.info && S.info.geo; return (b && b.nama) || (g && g.nama) || 'Puskesmas'; }
   function renderArea() { const el = $('#area'); if (el) el.innerHTML = areaHtml(); const ck = $('#ck-lokasi'); if (ck) ck.outerHTML = chkLokasi(); }
   function chkLokasi() {
     if (!S.gps) return '<div class="chk wait" id="ck-lokasi"><span class="ci">…</span><b>Lokasi</b><span>' + esc(S.gpsErr || 'mencari GPS…') + '</span></div>';
@@ -196,7 +198,7 @@
     const notifTukar = (tk.masuk ? '<button class="note tk-note" data-go="tukar"><span class="ni">⇄</span><div><b>' + tk.masuk + ' permintaan tukar shift</b> menunggu jawaban Anda' + (tk.daftar[0] ? '<br><small>' + esc(tk.daftar[0].dengan.nama) + ' · ' + esc(tglPendek(tk.daftar[0].tanggal)) + ': ' + esc(tk.daftar[0].saya_sebelum[0].kode) + ' → ' + esc(tk.daftar[0].saya_sesudah[0].kode) + '</small>' : '') + '</div><span class="tk-go">Jawab ›</span></button>' : '') +
       (tk.hasil || []).map(x => '<div class="note ' + (x.status === 'DISETUJUI' ? 'ok' : 'bad') + '"><span class="ni">⇄</span><div>Tukar shift dengan <b>' + esc(x.dengan.nama) + '</b> ' + esc(tglPendek(x.tanggal)) + ': <b>' + esc((ST_TK[x.status] || [x.status])[0]) + '</b>' + (x.catatan ? '<br><small style="color:var(--muted)">' + esc(x.catatan) + '</small>' : '') + '</div></div>').join('');
     const ak = r.akumulasi || {};
-    app.innerHTML = '<div class="view"><div class="hero"><div class="topbar"><img class="logo" src="' + esc(logo()) + '" alt="Logo"><div class="nm"><b>Presensi Dara Juanti</b><small>UPTD Puskesmas · Rawat Inap</small></div><button class="avatar" data-go="profil" aria-label="Profil">' + esc(p.inisial) + '</button></div>' +
+    app.innerHTML = '<div class="view"><div class="hero"><div class="topbar"><img class="logo" src="' + esc(logo()) + '" alt="Logo"><div class="nm"><b>Presensi Dara Juanti</b><small>📍 ' + esc(namaLokasi()) + '</small></div><button class="avatar" data-go="profil" aria-label="Profil">' + esc(p.inisial) + '</button></div>' +
       '<div class="greet"><small>' + salam(t) + '</small><h1>' + esc(nama) + (contoh ? ' <span class="tag contoh">CONTOH</span>' : '') + '</h1><div class="sub">' + esc(p.jabatan) + ' · ' + esc(p.unit) + '</div></div></div>' +
       '<div class="wrap"><div class="card"><h3>' + I.kal.replace('<svg', '<svg width="16" height="16"') + ' Jadwal hari ini · ' + esc(r.tanggal) + '</h3>' + jad +
       '<div class="clock"><div><div class="jam" id="jam">' + jamTeks(t) + '<small>:' + pad(wib(t).getUTCSeconds()) + '</small></div><div class="lbl">Waktu server · WIB</div></div><div id="area">' + areaHtml() + '</div></div></div>' +
@@ -223,7 +225,7 @@
       '<div class="chk ok"><span class="ci">✓</span><b>Perangkat</b><span>Terdaftar</span></div>' +
       '<div class="chk ' + (jad ? 'ok' : 'wait') + '"><span class="ci">' + (jad ? '✓' : 'i') + '</span><b>Jadwal</b><span>' + (jad ? esc(jad.nama + ' · ' + jad.jam) : 'Luar jadwal / diperiksa server') + '</span></div>' +
       '<div class="chk wait" id="ck-qr"><span class="ci"><span class="spin d" style="width:14px;height:14px;border-width:2px"></span></span><b>QR name tag</b><span>Memindai…</span></div></div>' +
-      '<p style="font-size:12.5px;color:var(--muted);text-align:center">Pindai QR di <b>name tag milik Anda sendiri</b>. QR pegawai lain ditolak & dicatat. QR hanya berlaku dari HP ini dan di area Puskesmas' + (S.info && S.info.pin_wajib === false ? '' : '; setelah terbaca, masukkan PIN') + '.</p></div></div>';
+      '<p style="font-size:12.5px;color:var(--muted);text-align:center">Pindai QR di <b>name tag milik Anda sendiri</b>. QR pegawai lain ditolak & dicatat. QR hanya berlaku dari HP ini dan di area ' + esc(namaLokasi()) + (S.info && S.info.pin_wajib === false ? '' : '; setelah terbaca, masukkan PIN') + '.</p></div></div>';
     Scanner.mulai($('#vid'), $('#cv'), teks => prosesQr(jenis, teks), msg => { const m = $('#scan-msg'); m.textContent = msg; m.classList.remove('hidden'); });
   }
   async function prosesQr(jenis, teks) {
@@ -351,7 +353,7 @@
   function gpsAjukan() {
     if (!S.gps) return '<div class="chk wait"><span class="ci">…</span><b>GPS</b><span>' + esc(S.gpsErr || 'mencari lokasi…') + '</span></div>';
     const j = jarakKe(S.gps.lat, S.gps.lng);
-    return '<div class="chk ok"><span class="ci">✓</span><b>GPS tercatat</b><span>' + (j ? jarakTeks(j.jarak) + ' dari Puskesmas · ' + (j.dalam ? 'dalam area' : 'di luar area (boleh)') : '') + '</span></div>';
+    return '<div class="chk ok"><span class="ci">✓</span><b>GPS tercatat</b><span>' + (j ? jarakTeks(j.jarak) + ' dari ' + esc(namaLokasi()) + ' · ' + (j.dalam ? 'dalam area' : 'di luar area (boleh)') : '') + '</span></div>';
   }
   function bacaB64(f) { return new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(f); }); }
   async function kompres(f, maks) {
