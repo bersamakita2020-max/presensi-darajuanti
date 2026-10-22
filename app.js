@@ -59,7 +59,7 @@
       throw e;
     }
   }
-  function keluarLokal() { S.token = null; LS.del('dj_token'); S.beranda = null; S.pantau = false; S.pt = null; LS.del('dj_pantau'); if (S.watch !== null) { navigator.geolocation.clearWatch(S.watch); S.watch = null; } }
+  function keluarLokal() { try { caches.delete('dj-ctx'); } catch (e) { } S.token = null; LS.del('dj_token'); S.beranda = null; S.pantau = false; S.pt = null; LS.del('dj_pantau'); if (S.watch !== null) { navigator.geolocation.clearWatch(S.watch); S.watch = null; } }
   // ---------- GPS ----------
   function jarakKe(lat, lng) {
     const g = S.info && S.info.geo; if (!g) return null;
@@ -527,7 +527,7 @@
   }
   function tglHariIni() { const d = wib(now()); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
   function matikanPantau(pesan) { S.pantau = false; LS.del('dj_pantau'); if (pesan) toast(pesan, 'bad', 4500); go('beranda'); }
-  const PT_TAB = [['belum', 'Belum masuk'], ['telat', 'Terlambat'], ['isl', 'Izin/Sakit/TL'], ['cuti', 'Cuti'], ['akt', 'Aktivitas']];
+  const PT_TAB = [['belum', 'Belum masuk'], ['telat', 'Terlambat'], ['isl', 'Izin/Sakit/TL'], ['cuti', 'Cuti'], ['akt', 'Aktivitas'], ['kb', 'Keberadaan'], ['lok', 'Peringatan Lokasi']];
   async function viewPantau(tglArg) {
     if (!S.pantau) return go('beranda');
     const P = S.pt = S.pt || { tab: 'belum', q: '', lokasi: '', unit: '', ids: {}, idsQ: '' };
@@ -547,9 +547,10 @@
     const P = S.pt, seq = P.seq = (P.seq || 0) + 1;
     if (!diam && P.m) $('#pt-isi').classList.add('memuat');
     try {
-      const m = await api('pantau', { tanggal: P.tgl, lokasi: P.lokasi, segar: !!segar });
+      const mulaiPL = P.plRentang === 7 ? geserTgl(P.tgl, -6) : P.tgl;
+      const [m, pl, kb] = await Promise.all([api('pantau', { tanggal: P.tgl, lokasi: P.lokasi, segar: !!segar }), api('pantau.lokasi', { mulai: mulaiPL, selesai: P.tgl }).catch(() => null), P.tgl === tglHariIni() ? api('pantau.keberadaan', {}).catch(() => null) : Promise.resolve(null)]); // TAHAP 10
       if (seq !== P.seq || location.hash.indexOf('pantau') < 0) return;
-      P.m = m; renderPantau();
+      P.m = m; P.pl = pl; P.kb = kb; renderPantau();
     } catch (e) {
       if (e.kode === 'AKSI' || e.kode === 'AKSES') return matikanPantau(e.kode === 'AKSI' ? 'Server belum mendukung Monitoring di aplikasi ini.' : e.message);
       if (location.hash.indexOf('pantau') < 0) return;
@@ -564,7 +565,8 @@
     const units = Array.from(new Set([].concat(m.belum, m.terlambat_list || [], m.isl_list || [], m.cuti_list || [], (m.unit || []).map(u => ({ unit: u.unit }))).map(x => x.unit).filter(x => x && x !== '-'))).sort();
     if (un) un.innerHTML = '<option value="">Semua unit</option>' + units.map(u => '<option' + (P.unit === u ? ' selected' : '') + '>' + esc(u) + '</option>').join('');
     const fU = x => !P.unit || x.unit === P.unit;
-    const L = { belum: m.belum.filter(fU), telat: (m.terlambat_list || []).filter(fU), isl: (m.isl_list || []).filter(fU), cuti: (m.cuti_list || []).filter(fU), akt: (m.aktivitas || []).filter(fU) };
+    const L = { belum: m.belum.filter(fU), telat: (m.terlambat_list || []).filter(fU), isl: (m.isl_list || []).filter(fU), cuti: (m.cuti_list || []).filter(fU), akt: (m.aktivitas || []).filter(fU), lok: P.pl ? P.pl.presensi.concat(P.pl.ditolak).filter(fU) : [], kb: P.kb ? P.kb.rows.filter(fU) : [] };
+    if ((!P.pl && P.tab === 'lok') || (!P.kb && P.tab === 'kb')) P.tab = 'belum';
     const kp = (j, n, sub, c, tab) => '<button class="pt-kpi" data-tab="' + tab + '" style="--c:' + c + '"><small>' + j + '</small><b>' + n + '</b><span>' + sub + '</span></button>';
     const masuk = k.hadir + k.terlambat;
     el.classList.remove('memuat');
@@ -573,8 +575,11 @@
       '<div class="pt-kpis">' + kp('Terjadwal', k.terjadwal, 'pegawai berdinas', '#1d4e89', 'belum') + kp('Sudah masuk', masuk, k.terjadwal ? Math.round(masuk / k.terjadwal * 100) + '% · tepat ' + k.hadir : '—', '#12873f', 'akt') +
       kp('Terlambat', k.terlambat, 'Σ ' + esc(m.kpi_teks || '0 menit'), '#c98a00', 'telat') + kp('Belum masuk', m.belum_total !== undefined ? m.belum_total : m.belum.length, 'belum ' + k.belum + ' · TK ' + k.TK, '#d64545', 'belum') +
       kp('Izin · Sakit · TL', k.I + k.S + k.TL, 'I ' + k.I + ' · S ' + k.S + ' · TL ' + k.TL, '#0e7c86', 'isl') + kp('Cuti', k.C || 0, 'sesuai jadwal', '#7c3aed', 'cuti') + '</div>' +
-      '<div class="pt-tabs" role="tablist">' + PT_TAB.map(t => '<button data-tab="' + t[0] + '" class="' + (P.tab === t[0] ? 'on' : '') + '">' + t[1] + ' <i>' + L[t[0]].length + '</i></button>').join('') + '</div>' +
+      (L.lok.length ? '<button class="pl-alert" data-tab="lok"><span class="ni">!</span><div><b>' + L.lok.length + ' peringatan lokasi</b><span>Presensi di luar area lokasi kerja · ketuk untuk melihat daftar</span></div></button>' : '') +
+      '<div class="pt-tabs" role="tablist">' + PT_TAB.filter(t => (t[0] !== 'lok' || P.pl) && (t[0] !== 'kb' || P.kb)).map(t => '<button data-tab="' + t[0] + '" class="' + (P.tab === t[0] ? 'on' : '') + (t[0] === 'lok' ? ' pl-tab' : '') + '">' + t[1] + ' <i' + ((t[0] === 'lok' && L.lok.length) || (t[0] === 'kb' && P.kb && P.kb.badge) ? ' class="merah"' : '') + '>' + (t[0] === 'kb' && P.kb ? P.kb.badge : L[t[0]].length) + '</i></button>').join('') + '</div>' +
       '<div class="pt-cari"><input class="inp" id="pt-q" placeholder="Cari nama, NIP/NIK, unit…" value="' + esc(P.q) + '" autocomplete="off" inputmode="search"><button type="button" id="pt-x" aria-label="Hapus pencarian" style="visibility:' + (P.q ? 'visible' : 'hidden') + '">×</button></div>' +
+      (P.tab === 'lok' && P.pl ? '<div class="pl-rentang"><button data-plr="1" class="' + (P.plRentang !== 7 ? 'on' : '') + '">Tanggal ini</button><button data-plr="7" class="' + (P.plRentang === 7 ? 'on' : '') + '">7 hari s.d. tanggal ini</button>' + (P.pl.jumlah ? '<button id="pl-xls" class="pl-xls">Unduh Excel</button>' : '') + '</div>' : '') +
+      (P.tab === 'kb' && P.kb ? kbKepalaAtas(P) : '') +
       '<div class="pt-hit" id="pt-hit"></div><div id="pt-list"></div>' +
       '<div class="sec-title">Unduh</div><button class="btn sec" id="pt-rekap">Rekap bulanan ' + esc(BULAN[+m.bulan.slice(5) - 1] + ' ' + m.bulan.slice(0, 4)) + ' (PDF)</button>' +
       '<p style="font-size:12px;color:var(--muted);margin:12px 0 4px">Mode pantau: hanya melihat, NIP/NIK disamarkan. Koreksi & persetujuan tetap dilakukan admin di panel admin.</p>';
@@ -583,6 +588,11 @@
     q.oninput = () => { P.q = q.value.trim(); cariNipPantau(); isiDaftarPantau(L); $('#pt-x').style.visibility = P.q ? 'visible' : 'hidden'; };
     $('#pt-x').onclick = () => { q.value = ''; P.q = ''; isiDaftarPantau(L); $('#pt-x').style.visibility = 'hidden'; q.focus(); };
     $('#pt-rekap').onclick = unduhRekapPantau;
+    el.querySelectorAll('[data-plr]').forEach(b => b.onclick = () => { P.plRentang = +b.dataset.plr; muatPantau(false); });
+    if ($('#pl-xls')) $('#pl-xls').onclick = unduhLokasiPantau;
+    if ($('#kb-cek')) $('#kb-cek').onclick = kbBuatCek;
+    if ($('#kb-hasil')) $('#kb-hasil').onclick = () => kbHasil(P.kb.terakhir_cek.id_cek);
+    if ($('#kb-riw')) $('#kb-riw').onclick = kbRiwayat;
     isiDaftarPantau(L);
     if (fk !== null) { q.focus(); try { q.setSelectionRange(fk, fk); } catch (e) { } }
   }
@@ -596,17 +606,90 @@
     const nq = P.q.replace(/\D/g, '');
     const cocok = x => cocokCari(x, P.q) || (nq.length >= 4 && P.idsQ === nq && !!P.ids[x.id]);
     const semua = L[P.tab], rows = semua.filter(cocok);
-    $('#pt-hit').innerHTML = P.q ? '<b>' + rows.length + '</b> dari ' + semua.length : semua.length + ' ' + (P.tab === 'akt' ? 'kejadian' : 'pegawai');
+    $('#pt-hit').innerHTML = P.q ? '<b>' + rows.length + '</b> dari ' + semua.length : semua.length + ' ' + (P.tab === 'akt' || P.tab === 'lok' ? 'kejadian' : P.tab === 'kb' ? 'pegawai sedang bertugas' : 'pegawai') + (P.tab === 'lok' && P.pl ? ' · ' + esc(tglPendek(P.pl.mulai)) + (P.pl.selesai !== P.pl.mulai ? '–' + esc(tglPendek(P.pl.selesai)) : '') : '');
     const sub = x => esc(x.unit || '') + (x.nip ? ' · ' + esc(x.nip) : '') + ((m.lokasi || []).length > 1 && x.lokasi ? ' · 📍 ' + esc(x.lokasi) : '');
     const baris = {
       belum: x => '<div class="list-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + sub(x) + '<br>' + esc(x.shift) + ' · batas ' + esc(x.jendela) + '</span></div><span class="tag ' + (x.status === 'BELUM HADIR' ? 'mut' : 'bad') + '">' + (x.status === 'BELUM HADIR' ? 'BELUM' : 'TK') + '</span></div>',
       telat: x => '<div class="list-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + sub(x) + '<br>' + esc(x.shift) + ' · masuk ' + esc(String(x.masuk || '').replace(':', '.')) + '</span></div><span class="tag warn">' + x.menit + ' mnt</span></div>',
       isl: x => '<div class="list-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + sub(x) + (x.rentang ? '<br>' + esc(x.rentang) : '') + '</span></div><span class="tag info">' + esc(x.jenis) + '</span></div>',
       cuti: x => '<div class="list-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + sub(x) + '</span></div><span class="tag ung">CUTI</span></div>',
+      kb: x => '<div class="list-item pl-item' + (x.dalam === false ? ' kb-luar' : '') + '"><div class="m"><b>' + esc(x.nama) + '</b><span>' + esc(x.unit || '') + (x.nip ? ' · ' + esc(x.nip) : '') + '</span>' +
+        '<span class="pl-baris">Masuk ' + esc(String(x.masuk).replace(':', '.')) + ' · terakhir terlihat <b>' + esc(String(x.terakhir).replace(':', '.')) + '</b> (' + kbLalu(x.menit_lalu) + ')' + (x.jarak !== '' ? ' · ' + Number(x.jarak).toLocaleString('id-ID') + ' m dari ' + esc(x.lokasi) : '') + '</span>' +
+        '<span class="pl-baris">' + ({ PASIF: 'Lokasi otomatis', CEK: 'Jawaban cek keberadaan', MASUK: 'Saat presensi masuk' })[x.sumber] + (x.akurasi ? ' · GPS ±' + esc(x.akurasi) + ' m' : '') + (x.tl === 'TL_RESMI' ? ' · <b class="pl-tl">Tugas Lapangan disetujui</b>' : x.tl === 'TL_MENUNGGU' ? ' · <b class="pl-tl">Tugas Lapangan menunggu</b>' : '') + '</span>' +
+        (x.peta ? '<a class="pl-peta" href="' + esc(x.peta) + '" target="_blank" rel="noopener">Lihat peta ›</a>' : '') + '</div><span class="tag ' + (x.dalam === false ? 'bad' : x.dalam ? 'ok' : 'mut') + '">' + (x.dalam === false ? 'DI LUAR' : x.dalam ? 'DI LOKASI' : '—') + '</span></div>',
+      lok: x => '<div class="list-item pl-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + esc(x.unit || '') + (x.nip ? ' · ' + esc(x.nip) : '') + '</span>' +
+        '<span class="pl-baris">' + (x.jenis === 'MASUK' ? 'Masuk' : 'Pulang') + ' · ' + esc(tglPendek(x.tanggal)) + ' ' + esc(String(x.jam).replace(':', '.')) + ' · <b>' + Number(x.jarak).toLocaleString('id-ID') + ' m</b> dari ' + esc(x.lokasi) + ' (batas ' + esc(x.radius) + ' m) · GPS ±' + esc(x.akurasi) + ' m</span>' +
+        '<span class="pl-baris">' + (x.sumber === 'PRESENSI' ? 'Presensi tercatat' : 'Presensi ditolak ' + x.percobaan + '×' + (x.berhasil_jam ? (x.berhasil_koreksi ? ' · dikoreksi admin ' : ' · berhasil di lokasi ') + esc(String(x.berhasil_jam).replace(':', '.')) : '')) + (x.tl === 'TL_RESMI' ? ' · <b class="pl-tl">Tugas Lapangan disetujui</b>' : x.tl === 'TL_MENUNGGU' ? ' · <b class="pl-tl">Tugas Lapangan menunggu</b>' : '') + '</span>' +
+        ((x.keterangan || x.tl_ket) ? '<span class="pl-ket">' + esc(x.keterangan || x.tl_ket) + '</span>' : '') +
+        (x.peta ? '<a class="pl-peta" href="' + esc(x.peta) + '" target="_blank" rel="noopener">Lihat peta ›</a>' : '') + '</div><span class="tag ' + (x.kelas === 'LUAR' ? 'bad' : 'warn') + '">' + (x.kelas === 'LUAR' ? 'DI LUAR' : 'MERAGUKAN') + '</span></div>',
       akt: x => '<div class="list-item"><div class="d"><b style="font-size:15px">' + esc(String(x.waktu).replace(':', '.')) + '</b></div><div class="m"><b>' + esc(x.nama) + '</b><span>' + esc(x.unit || '') + ' · ' + esc(x.jenis) + (x.shift ? ' · ' + esc(x.shift) : '') + '</span></div><span class="tag ' + (!x.ok ? 'bad' : /TERLAMBAT|PULANG_AWAL/.test(x.status) ? 'warn' : 'ok') + '">' + esc(!x.ok ? 'DITOLAK' : String(x.status).replace(/_/g, ' ')) + (x.lama ? ' ' + x.lama + 'm' : '') + '</span></div>'
     };
-    const kosong = { belum: 'Semua yang terjadwal sudah presensi masuk.', telat: 'Tidak ada yang terlambat.', isl: 'Tidak ada izin/sakit/TL.', cuti: 'Tidak ada yang cuti.', akt: 'Belum ada presensi.' };
+    const kosong = { belum: 'Semua yang terjadwal sudah presensi masuk.', telat: 'Tidak ada yang terlambat.', isl: 'Tidak ada izin/sakit/TL.', cuti: 'Tidak ada yang cuti.', akt: 'Belum ada presensi.', kb: 'Belum ada pegawai yang sedang bertugas (sudah masuk dan belum pulang).', lok: 'Tidak ada presensi di luar lokasi. Semua presensi berada di area lokasi kerja.' };
     el.innerHTML = rows.length ? rows.map(baris[P.tab]).join('') : '<p class="pt-kosong">' + (P.q && semua.length ? 'Tidak ada nama yang cocok dengan “' + esc(P.q) + '”.' : kosong[P.tab]) + '</p>';
+  }
+  function geserTgl(d, n) { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
+  // ---------- TAHAP 10: Cek Keberadaan (Kepala Puskesmas) ----------
+  function kbLalu(m) { m = +m || 0; return m < 1 ? 'baru saja' : m < 60 ? m + ' menit lalu' : Math.floor(m / 60) + ' jam ' + (m % 60) + ' menit lalu'; }
+  function kbKepalaAtas(P) {
+    const k = P.kb, c = k.terakhir_cek;
+    return '<div class="kb-panel"><button class="btn pri" id="kb-cek">Cek keberadaan sekarang' + (P.unit ? ' · ' + esc(P.unit) : '') + '</button>' +
+      '<p class="kb-sub">' + k.bertugas + ' pegawai sedang bertugas' + (k.di_luar ? ' · <b class="merah">' + k.di_luar + ' terakhir terlihat di luar lokasi</b>' : '') + ' · batas jawab ' + k.batas_menit + ' menit</p>' +
+      (c ? '<div class="kb-cek"><div><b>Cek terakhir ' + esc(c.jam.replace(':', '.')) + '</b><span>' + (c.selesai ? 'selesai' : 'menunggu jawaban s.d. ' + esc(c.batas.replace(':', '.'))) + ' · ' + c.jumlah + ' pegawai</span></div>' +
+        '<div class="kb-angka"><i class="r">' + c.di_luar + '<small>di luar</small></i><i class="o">' + c.tidak + '<small>' + (c.selesai ? 'tidak merespons' : 'belum jawab') + '</small></i><i class="g">' + c.di_lokasi + '<small>di lokasi</small></i></div>' +
+        '<div class="kb-aksi"><button class="btn sec" id="kb-hasil">Lihat hasil</button><button class="btn sec" id="kb-riw">Riwayat hari ini</button></div></div>' : '') +
+      '<div class="sec-title" style="margin-top:14px">Lokasi terakhir diketahui</div></div>';
+  }
+  async function kbBuatCek() {
+    const P = S.pt, b = $('#kb-cek'); b.disabled = true;
+    try {
+      const pr = await api('pantau.cekBuat', { unit: P.unit, pratinjau: true });
+      b.disabled = false;
+      const el = openSheet('<h3>Cek keberadaan sekarang</h3><p>Permintaan konfirmasi lokasi dikirim ke <b>' + pr.jumlah + ' pegawai</b> yang sedang bertugas' + (P.unit ? ' di unit <b>' + esc(P.unit) + '</b>' : '') + '. Pegawai menjawab dari aplikasi di HP masing-masing.</p><button class="btn pri" id="kb-ya">Kirim permintaan</button><button class="btn sec" id="kb-no" style="margin-top:8px">Batal</button>');
+      $('#kb-no', el).onclick = closeSheet;
+      $('#kb-ya', el).onclick = async () => { const y = $('#kb-ya', el); y.disabled = true; try { const r = await api('pantau.cekBuat', { unit: P.unit }); closeSheet(); toast('Permintaan dikirim ke ' + r.jumlah + ' pegawai. Batas jawab pukul ' + r.batas + '.', 'ok', 4500); muatPantau(true); } catch (e) { y.disabled = false; toast(e.message, 'bad', 5000); } };
+    } catch (e) { b.disabled = false; if (e.kode === 'AKSI' || e.kode === 'AKSES') return matikanPantau(e.message); toast(e.message, 'bad', 5000); }
+  }
+  function kbBaris(x, jenis) {
+    const tl = x.tl === 'TL_RESMI' ? ' · <b class="pl-tl">Tugas Lapangan disetujui</b>' : x.tl === 'TL_MENUNGGU' ? ' · <b class="pl-tl">Tugas Lapangan menunggu</b>' : '';
+    if (jenis === 'tidak') return '<div class="list-item pl-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + esc(x.unit) + (x.nip ? ' · ' + esc(x.nip) : '') + tl + '</span></div><span class="tag warn">' + (x.status === 'MENUNGGU' ? 'MENUNGGU' : 'TIDAK MERESPONS') + '</span></div>';
+    return '<div class="list-item pl-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + esc(x.unit) + (x.nip ? ' · ' + esc(x.nip) : '') + '</span><span class="pl-baris">Jawab ' + esc(String(x.jam).replace(':', '.')) + ' · <b>' + Number(x.jarak).toLocaleString('id-ID') + ' m</b> dari ' + esc(x.lokasi) + ' · GPS ±' + esc(x.akurasi) + ' m' + tl + '</span>' + (x.peta ? '<a class="pl-peta" href="' + esc(x.peta) + '" target="_blank" rel="noopener">Lihat peta ›</a>' : '') + '</div><span class="tag ' + (jenis === 'luar' ? 'bad' : 'ok') + '">' + (jenis === 'luar' ? 'DI LUAR' : 'DI LOKASI') + '</span></div>';
+  }
+  async function kbHasil(id) {
+    const el = openSheet('<div class="loading"><span class="spin d"></span>Memuat hasil…</div>');
+    try {
+      const r = await api('pantau.cekDetail', { id_cek: id });
+      el.querySelector('.sheet').innerHTML = '<div class="grab"></div><h3>Hasil cek ' + esc(r.jam.replace(':', '.')) + '</h3><p class="kb-sub">' + esc(r.oleh) + ' · ' + r.jumlah + ' pegawai · ' + (r.selesai ? 'batas ' + esc(r.batas.replace(':', '.')) + ' sudah lewat' : 'menunggu jawaban s.d. ' + esc(r.batas.replace(':', '.'))) + '</p>' +
+        '<div class="kb-grp r">Di luar lokasi <i>' + r.di_luar.length + '</i></div>' + (r.di_luar.length ? r.di_luar.map(x => kbBaris(x, 'luar')).join('') : '<p class="pt-kosong">Tidak ada.</p>') +
+        '<div class="kb-grp o">' + (r.selesai ? 'Tidak merespons' : 'Belum menjawab') + ' <i>' + r.tidak.length + '</i></div>' + (r.tidak.length ? r.tidak.map(x => kbBaris(x, 'tidak')).join('') : '<p class="pt-kosong">Tidak ada.</p>') +
+        '<details class="kb-det"><summary>Di lokasi <i>' + r.di_lokasi.length + '</i></summary>' + r.di_lokasi.map(x => kbBaris(x, 'dalam')).join('') + '</details>' +
+        '<button class="btn sec" id="kb-xls" style="margin-top:12px">Unduh Excel</button><button class="btn sec" id="kb-tt" style="margin-top:8px">Tutup</button>';
+      $('#kb-tt', el).onclick = closeSheet;
+      $('#kb-xls', el).onclick = async () => { const b = $('#kb-xls', el); b.disabled = true; try { const x = await api('pantau.cekXlsx', { id_cek: id }, { timeout: 90000, ulang: 0 }); unduhBerkas(x); } catch (e) { toast(e.message, 'bad'); } b.disabled = false; };
+    } catch (e) { closeSheet(); toast(e.message, 'bad', 5000); }
+  }
+  async function kbRiwayat() {
+    const el = openSheet('<div class="loading"><span class="spin d"></span>Memuat…</div>');
+    try {
+      const r = await api('pantau.cekList', {});
+      el.querySelector('.sheet').innerHTML = '<div class="grab"></div><h3>Riwayat cek hari ini</h3>' + (r.rows.length ? r.rows.map(x => '<button class="list-item kb-riw" data-id="' + esc(x.id_cek) + '"><div class="m"><b>' + esc(x.jam.replace(':', '.')) + ' · ' + x.jumlah + ' pegawai</b><span>' + esc(x.oleh) + ' · di luar ' + x.di_luar + ' · ' + (x.selesai ? 'tidak merespons ' : 'belum jawab ') + x.tidak + ' · di lokasi ' + x.di_lokasi + '</span></div><span class="tag ' + (x.di_luar ? 'bad' : 'ok') + '">' + (x.di_luar ? x.di_luar + ' DI LUAR' : 'LIHAT') + '</span></button>').join('') : '<p class="pt-kosong">Belum ada permintaan cek hari ini.</p>') + '<button class="btn sec" id="kb-tt" style="margin-top:10px">Tutup</button>';
+      $('#kb-tt', el).onclick = closeSheet;
+      el.querySelectorAll('[data-id]').forEach(b => b.onclick = () => kbHasil(b.dataset.id));
+    } catch (e) { closeSheet(); toast(e.message, 'bad'); }
+  }
+  function unduhBerkas(r) {
+    const bin = atob(r.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: r.mime })), a = document.createElement('a'); a.href = url; a.download = r.nama; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast('Berkas diunduh: ' + r.nama, 'ok');
+  }
+  async function unduhLokasiPantau() {
+    const b = $('#pl-xls'), t0 = b.textContent; b.disabled = true; b.textContent = 'Menyiapkan…';
+    try {
+      const r = await api('pantau.lokasiXlsx', { mulai: S.pt.pl.mulai, selesai: S.pt.pl.selesai }, { timeout: 90000, ulang: 0 });
+      const bin = atob(r.b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u8], { type: r.mime })), a = document.createElement('a'); a.href = url; a.download = r.nama; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+      toast('Excel diunduh: ' + r.nama, 'ok');
+    } catch (e) { toast(e.message, 'bad', 5000); }
+    b.disabled = false; b.textContent = t0;
   }
   async function unduhRekapPantau() {
     const b = $('#pt-rekap'), t0 = b.textContent; b.disabled = true; b.innerHTML = '<span class="spin d"></span> Menyiapkan PDF…';
@@ -649,12 +732,13 @@
       $('#isi').innerHTML = '<div class="card" style="text-align:center"><div class="avatar" style="width:86px;height:86px;margin:4px auto 10px;background:var(--hijauL);color:var(--hijau);border-color:var(--hijauL);font-size:28px">' + (p.foto ? '<img src="' + esc(p.foto) + '" alt="">' : esc(p.inisial)) + '</div><b style="font-size:18px">' + esc(p.nama) + '</b><div style="color:var(--muted);font-size:14px">' + esc(p.jabatan) + ' · ' + esc(p.unit) + '</div><div style="margin-top:8px"><span class="tag ok">' + esc(p.kategori_label) + '</span> <span class="tag mut">' + esc(p.grup_jadwal) + '</span></div></div>' +
         '<div class="card dl"><div><span>NIP/NIK</span><b>' + esc(p.nip) + '</b></div><div><span>Golongan</span><b>' + esc(p.golongan || '—') + '</b></div><div><span>Perangkat terdaftar</span><b>' + esc(p.perangkat ? p.perangkat.label : '-') + '</b></div><div><span>Terdaftar sejak</span><b>' + esc(p.perangkat ? p.perangkat.sejak : '-') + '</b></div></div>' +
         '<button class="btn sec" id="b-sandi" style="margin-bottom:10px">Ganti kata sandi</button><button class="btn sec" id="b-pin" style="margin-bottom:10px">Ganti PIN</button>' +
-        (S.installEvt ? '<button class="btn sec" id="b-pasang" style="margin-bottom:10px">Pasang di layar utama</button>' : '') +
+        (terpasang() ? '' : '<button class="btn sec" id="b-pasang" style="margin-bottom:10px">📲 Tambahkan ke Layar Utama</button>') + (!iosBelumLayarUtama() && pushDidukung() && Notification.permission !== 'granted' && Notification.permission !== 'denied' ? '<button class="btn sec" id="b-notif" style="margin-bottom:10px">🔔 Aktifkan notifikasi</button>' : '') +
         '<button class="btn sec" id="b-priv" style="margin-bottom:10px">Pemberitahuan privasi</button><button class="btn bad" id="b-out">Keluar</button>' +
         '<p style="font-size:12px;color:var(--muted);text-align:center;margin-top:14px">Ganti HP? Minta admin mereset perangkat. Menghapus data browser juga memerlukan pendaftaran ulang perangkat.<br>v' + esc(C.VERSI) + '</p>';
       $('#b-priv').onclick = sheetPrivasi;
       $('#b-out').onclick = async () => { try { await api('logout', {}); } catch (e) { } keluarLokal(); go('login'); };
-      if ($('#b-pasang')) $('#b-pasang').onclick = () => { S.installEvt.prompt(); S.installEvt = null; };
+      if ($('#b-pasang')) $('#b-pasang').onclick = () => pasangSekarang();
+      if ($('#b-notif')) $('#b-notif').onclick = async () => { try { await pushAktifkan(); $('#b-notif').remove(); toast('Notifikasi aktif.', 'ok'); } catch (e) { toast(e.message, 'bad', 5000); } };
       $('#b-sandi').onclick = () => sheetForm('Ganti kata sandi', [['lama', 'Kata sandi lama', 'password'], ['baru', 'Kata sandi baru (min. 8, huruf+angka)', 'password'], ['ulang', 'Ulangi kata sandi baru', 'password']], async v => {
         if (v.baru !== v.ulang) throw new Error('Ulangan tidak sama.'); const r = await api('gantiSandi', { lama: v.lama, baru: v.baru }); S.token = r.token; LS.set('dj_token', r.token); toast('Kata sandi diganti.', 'ok'); });
       $('#b-pin').onclick = () => sheetForm('Ganti PIN', [['lama', 'PIN lama', 'password', 'numeric'], ['baru', 'PIN baru (6 digit)', 'password', 'numeric'], ['ulang', 'Ulangi PIN baru', 'password', 'numeric']], async v => {
@@ -714,8 +798,155 @@
     const el = openSheet('<h3>Pemberitahuan Privasi</h3><div style="font-size:14px;color:var(--ink)"><p style="color:var(--ink)">Sesuai UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi, aplikasi ini memproses:</p><ul style="padding-left:18px;margin:0 0 10px"><li><b>Identitas kepegawaian</b> (nama, NIP/NIK, jabatan, unit, kategori).</li><li><b>Lokasi GPS</b> & akurasinya <b>hanya saat</b> Anda menekan presensi/pengajuan (bukan pelacakan terus-menerus di server).</li><li><b>ID perangkat</b> yang disimpan dalam bentuk hash untuk kunci 1 HP.</li><li><b>Bukti</b> izin/sakit/tugas yang Anda unggah.</li><li>Waktu server setiap transaksi & log keamanan.</li></ul><p style="color:var(--ink)"><b>Tujuan:</b> presensi & administrasi kepegawaian Puskesmas. Data disimpan di akun Google institusi, tidak dibagikan publik, dan hanya dapat diakses admin berwenang. Anda berhak meminta akses/koreksi data melalui bagian kepegawaian.</p></div><button class="btn pri" id="s-ok">Tutup</button>');
     $('#s-ok', el).onclick = closeSheet;
   }
+  // ---------- TAHAP 10: konfirmasi keberadaan & lokasi selama jam kerja ----------
+  const KB = { sibuk: false, t: 0, mati: false, jawab: null };
+  function kbBolehCek() { const v = location.hash.replace(/^#\//, '').split('/')[0]; return S.token && !KB.mati && document.visibilityState === 'visible' && v !== 'login' && v !== 'aktivasi'; }
+  async function kbPeriksa(paksa) {
+    if (!kbBolehCek() || KB.sibuk) return;
+    if (!paksa && Date.now() - KB.t < 50000) return;
+    KB.sibuk = true; KB.t = Date.now();
+    try {
+      const r = await api('cek.status', {}, { ulang: 0, timeout: 15000 });
+      KB.menit = r.jejak_menit;
+      if (r.cek) kbLayar(r.cek); else if (!KB.jawab) kbTutup();
+      if (r.minta_lokasi) kbJejak();
+      pushTawar();
+    } catch (e) { if (e.kode === 'AKSI') KB.mati = true; }
+    KB.sibuk = false;
+  }
+  function kbGpsSegar() {
+    return new Promise((ok, no) => {
+      if (!('geolocation' in navigator)) return no(new Error('Perangkat tidak mendukung GPS.'));
+      navigator.geolocation.getCurrentPosition(p => { S.gps = { lat: p.coords.latitude, lng: p.coords.longitude, akurasi: Math.round(p.coords.accuracy), ts: Date.now() }; ok(S.gps); },
+        e => no(new Error(e.code === 1 ? 'Izin lokasi ditolak. Aktifkan lokasi untuk aplikasi ini di pengaturan browser.' : 'Lokasi GPS belum didapat. Aktifkan GPS lalu coba lagi.')), { enableHighAccuracy: true, maximumAge: 0, timeout: 25000 });
+    });
+  }
+  function kbPrivasi() {
+    return new Promise(res => {
+      if (LS.get('dj_privasi_lokasi') === '1') return res(true);
+      if ($('#kb-priv')) return res(false);
+      const d = document.createElement('div'); d.id = 'kb-priv'; d.className = 'kb-priv';
+      d.innerHTML = '<div><b>Pencatatan lokasi selama jam kerja</b><p>Setelah Anda presensi masuk dan sebelum presensi pulang, aplikasi ini mencatat lokasi HP Anda saat aplikasi dibuka (paling sering sekali tiap ' + (KB.menit || 10) + ' menit). Lokasi hanya dilihat Kepala Puskesmas untuk memastikan kehadiran di tempat tugas. Di luar jam kerja lokasi tidak dicatat.</p><button class="btn pri" id="kb-priv-ok">Saya mengerti</button></div>';
+      document.body.appendChild(d);
+      $('#kb-priv-ok', d).onclick = () => { LS.set('dj_privasi_lokasi', '1'); d.remove(); res(true); };
+    });
+  }
+  async function kbJejak() {
+    if (!(await kbPrivasi())) return;
+    try { const g = (S.gps && Date.now() - S.gps.ts < 60000) ? S.gps : await posisiSegar(); await api('jejak.kirim', { lat: g.lat, lng: g.lng, akurasi: g.akurasi }, { ulang: 0, timeout: 15000 }); } catch (e) { }
+  }
+  function kbTutup() { const d = $('#kb-layar'); if (d) d.remove(); KB.jawab = null; }
+  function kbLayar(c) {
+    let d = $('#kb-layar');
+    if (d && d.dataset.id === c.id_cek) return;
+    if (d) d.remove();
+    d = document.createElement('div'); d.id = 'kb-layar'; d.className = 'kb-layar'; d.dataset.id = c.id_cek;
+    d.innerHTML = '<div class="kb-kotak"><div class="kb-ikon">📍</div><h2>Kepala Puskesmas meminta konfirmasi keberadaan</h2><p>Tekan tombol di bawah untuk mengirim lokasi Anda saat ini. Mohon dijawab sebelum pukul <b>' + esc(String(c.batas).replace(':', '.')) + '</b>.</p>' +
+      '<div id="kb-pesan"></div><button class="btn pri" id="kb-kirim">Konfirmasi lokasi saya</button><p class="kb-kecil">Pastikan GPS aktif. Lokasi diambil saat tombol ditekan.</p></div>';
+    document.body.appendChild(d);
+    $('#kb-kirim', d).onclick = async () => {
+      const b = $('#kb-kirim', d), ps = $('#kb-pesan', d); b.disabled = true; b.innerHTML = '<span class="spin"></span> Mengambil lokasi…'; ps.innerHTML = '';
+      try {
+        const g = await kbGpsSegar(); b.innerHTML = '<span class="spin"></span> Mengirim…';
+        const r = await api('cek.jawab', { id_cek: c.id_cek, lat: g.lat, lng: g.lng, akurasi: g.akurasi }, { ulang: 1, timeout: 25000 });
+        KB.jawab = c.id_cek;
+        d.querySelector('.kb-kotak').innerHTML = '<div class="kb-ikon ' + (r.dalam ? 'ok' : 'bad') + '">' + (r.dalam ? '✓' : '!') + '</div><h2>Terima kasih</h2><p>' + (r.sudah ? 'Konfirmasi Anda sudah diterima sebelumnya.' : 'Lokasi Anda tercatat pukul ' + esc(String(r.jam).replace(':', '.')) + (r.dalam ? ', di area ' + esc(r.lokasi) + '.' : ', <b>di luar area ' + esc(r.lokasi) + '</b> (±' + jarakTeks(r.jarak) + ').')) + '</p><button class="btn pri" id="kb-ok">Tutup</button>';
+        $('#kb-ok', d).onclick = kbTutup;
+      } catch (e) {
+        if (e.kode === 'SELESAI') { kbTutup(); toast(e.message, 'bad', 4000); return; }
+        ps.innerHTML = '<div class="note bad"><span class="ni">!</span><div>' + esc(e.message) + '</div></div>'; b.disabled = false; b.textContent = 'Coba lagi';
+      }
+    };
+  }
+  // ---------- TAHAP 10: notifikasi HP (Web Push standar, opsional) & Tambahkan ke Layar Utama ----------
+  const PUSH = { proses: false };
+  const UA = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const iosBukanSafari = isIOS && /CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram|Line\/|WhatsApp/.test(UA);
+  function terpasang() { return !!(navigator.standalone || (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches)) || LS.get('dj_terpasang') === '1' && !isIOS && window.matchMedia && matchMedia('(display-mode: standalone)').matches); }
+  function iosBelumLayarUtama() { return isIOS && !terpasang(); }
+  function pushDidukung() { return 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window && location.protocol === 'https:'; }
+  function b64uKeBytes(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const r = atob(s), o = new Uint8Array(r.length); for (let i = 0; i < r.length; i++) o[i] = r.charCodeAt(i); return o; }
+  /** Simpan konteks minimal agar service worker bisa menanyakan permintaan cek aktif saat ada push. */
+  async function swKonteks() {
+    try { if (!('caches' in window)) return; const c = await caches.open('dj-ctx'); if (S.token) await c.put('./__ctx', new Response(JSON.stringify({ api: C.API_URL, token: S.token, device: S.device }), { headers: { 'Content-Type': 'application/json' } })); else await c.delete('./__ctx'); } catch (e) { }
+  }
+  async function pushLangganan() {
+    const reg = await navigator.serviceWorker.ready;
+    const k = await api('push.kunci', {}, { ulang: 1, timeout: 20000 }), kunci = b64uKeBytes(k.kunci);
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && sub.options && sub.options.applicationServerKey) { const a = new Uint8Array(sub.options.applicationServerKey); if (a.length !== kunci.length || a.some((x, i) => x !== kunci[i])) { await sub.unsubscribe(); sub = null; } }
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: kunci });
+    await api('push.daftar', { endpoint: sub.endpoint, platform: /Android/.test(UA) ? 'Android' : isIOS ? 'iPhone' : 'Lainnya' });
+    LS.set('dj_push_t', String(Date.now())); await swKonteks();
+  }
+  async function pushAktifkan() {
+    const izin = await Notification.requestPermission();
+    if (izin !== 'granted') throw new Error('Notifikasi tidak diizinkan. Permintaan konfirmasi tetap muncul saat aplikasi dibuka.');
+    await pushLangganan();
+  }
+  function bannerDi(d) { const v = document.querySelector('.view'); if (!v) return false; const k = v.querySelector('.wrap > .card'); if (k) { d.style.margin = '12px 0 0'; k.after(d); } else v.insertBefore(d, v.children[1] || null); return true; }
+  async function pushTawar() {
+    if (PUSH.proses || !S.token) return;
+    if (location.hash.indexOf('beranda') < 0 && location.hash !== '' && location.hash !== '#/') return;
+    swKonteks();
+    if (pushDidukung() && Notification.permission === 'granted') { // perbarui langganan diam-diam sekali sehari
+      if (Date.now() - (+LS.get('dj_push_t') || 0) > 86400000) { PUSH.proses = true; try { await pushLangganan(); } catch (e) { } PUSH.proses = false; }
+      return;
+    }
+    if (pasangTawar()) return; // belum terpasang: tawarkan pasang dulu
+    if (LS.get('dj_push_tutup') === '1' || $('#push-tawar') || $('#pasang-tawar')) return;
+    if (iosBelumLayarUtama() || !pushDidukung() || Notification.permission === 'denied') return;
+    const d = document.createElement('div'); d.id = 'push-tawar'; d.className = 'note info push-tawar';
+    d.innerHTML = '<span class="ni">🔔</span><div style="flex:1"><b>Notifikasi konfirmasi keberadaan</b><br>Aktifkan agar HP berbunyi saat Kepala Puskesmas meminta konfirmasi lokasi, walaupun aplikasi sedang ditutup.' +
+      '<div class="push-aksi"><button class="btn pri" id="push-ya">Aktifkan notifikasi</button><button class="btn sec" id="push-no">Nanti saja</button></div></div>';
+    if (!bannerDi(d)) return;
+    $('#push-no', d).onclick = () => { LS.set('dj_push_tutup', '1'); d.remove(); };
+    const ya = $('#push-ya', d);
+    ya.onclick = async () => { ya.disabled = true; PUSH.proses = true; try { await pushAktifkan(); d.remove(); toast('Notifikasi aktif.', 'ok'); } catch (e) { ya.disabled = false; toast(e.message, 'bad', 5000); } PUSH.proses = false; };
+  }
+  /** Banner "Tambahkan ke Layar Utama" (bisa ditutup, diingat 7 hari). Return true bila banner tampil. */
+  function pasangTawar() {
+    if (terpasang() || $('#pasang-tawar')) return !!$('#pasang-tawar');
+    if (!isIOS && !S.installEvt) return false;
+    if (Date.now() - (+LS.get('dj_pasang_tutup') || 0) < 7 * 86400000) return false;
+    const d = document.createElement('div'); d.id = 'pasang-tawar'; d.className = 'note info push-tawar';
+    d.innerHTML = '<span class="ni">📲</span><div style="flex:1"><b>Tambahkan ke Layar Utama</b><br>Buka aplikasi presensi langsung dari ikon di HP' + (isIOS ? ', dan aktifkan notifikasi konfirmasi keberadaan (di iPhone notifikasi hanya bisa aktif dari Layar Utama).' : ' dan terima notifikasi konfirmasi keberadaan.') +
+      '<div class="push-aksi"><button class="btn pri" id="pasang-ya">Tambahkan</button><button class="btn sec" id="pasang-no">Nanti saja</button></div></div>';
+    if (!bannerDi(d)) return false;
+    $('#pasang-no', d).onclick = () => { LS.set('dj_pasang_tutup', String(Date.now())); d.remove(); };
+    $('#pasang-ya', d).onclick = () => pasangSekarang();
+    return true;
+  }
+  async function pasangSekarang() {
+    if (S.installEvt) {
+      const ev = S.installEvt; S.installEvt = null;
+      try { ev.prompt(); const r = await ev.userChoice; if (r && r.outcome === 'accepted') { const b = $('#pasang-tawar'); if (b) b.remove(); } } catch (e) { }
+      perbaruiTombolPasang(); return;
+    }
+    if (isIOS) return panduanIOS();
+    const el = openSheet('<h3>Tambahkan ke Layar Utama</h3><p>Buka menu browser (⋮) lalu pilih <b>Instal aplikasi</b> atau <b>Tambahkan ke layar utama</b>.</p><button class="btn pri" id="s-ok">Mengerti</button>'); $('#s-ok', el).onclick = closeSheet;
+  }
+  function panduanIOS() {
+    const langkah = (n, ikon, t) => '<div class="ios-langkah"><span class="ios-no">' + n + '</span><span class="ios-ikon">' + ikon + '</span><div>' + t + '</div></div>';
+    const svgBagikan = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#0a84ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg>';
+    const svgTambah = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>';
+    const isi = (iosBukanSafari ? '<div class="note warn"><span class="ni">!</span><div>Anda membuka aplikasi ini dari browser lain. Di iPhone/iPad, salin alamat ini lalu buka di <b>Safari</b> untuk menambahkannya ke Layar Utama.<br><button class="btn sec" id="ios-salin" style="margin-top:8px">Salin alamat</button></div></div>' : '') +
+      langkah(1, svgBagikan, 'Ketuk tombol <b>Bagikan</b> di bawah (atau di atas pada iPad) layar Safari.') +
+      langkah(2, svgTambah, 'Gulir lalu pilih <b>Tambah ke Layar Utama</b>.') +
+      langkah(3, '<b style="color:#0a84ff">Tambah</b>', 'Ketuk <b>Tambah</b> di pojok kanan atas, lalu buka aplikasi dari ikon <b>Presensi DJ</b>.') +
+      '<p class="kb-kecil" style="margin-top:10px">Notifikasi Cek Keberadaan di iPhone/iPad (iOS 16.4 atau lebih baru) hanya bisa diaktifkan setelah aplikasi dibuka dari Layar Utama.</p>';
+    const el = openSheet('<h3>Tambahkan ke Layar Utama</h3>' + isi + '<button class="btn pri" id="s-ok" style="margin-top:12px">Mengerti</button>'); $('#s-ok', el).onclick = closeSheet;
+    const s = $('#ios-salin'); if (s) s.onclick = () => { try { navigator.clipboard.writeText(location.href.split('#')[0]); toast('Alamat disalin. Tempel di Safari.', 'ok'); } catch (e) { } };
+  }
+  function perbaruiTombolPasang() { const b = $('#b-pasang'); if (b) b.style.display = terpasang() ? 'none' : ''; }
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.installEvt = e; perbaruiTombolPasang(); setTimeout(pushTawar, 300); });
+  window.addEventListener('appinstalled', () => { S.installEvt = null; LS.set('dj_terpasang', '1'); const b = $('#pasang-tawar'); if (b) b.remove(); perbaruiTombolPasang(); toast('Aplikasi ditambahkan ke Layar Utama.', 'ok'); setTimeout(pushTawar, 800); });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.jenis === 'CEK') kbPeriksa(true); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') kbPeriksa(true); });
+  window.addEventListener('hashchange', () => setTimeout(() => kbPeriksa(false), 800));
+  setInterval(() => kbPeriksa(true), 60000);
   // ---------- mulai ----------
-  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.installEvt = e; });
   window.addEventListener('offline', () => toast('Koneksi terputus. Presensi memerlukan internet.', 'bad', 4000));
   async function init() {
     S.device = deviceId();
@@ -724,6 +955,7 @@
     const sp = $('#splash'); if (sp) { sp.style.transition = 'opacity .35s'; sp.style.opacity = '0'; setTimeout(() => sp.remove(), 380); }
     if (S.token) { mulaiGps(); if (!location.hash || location.hash === '#/' || location.hash === '#/login') location.hash = '#/beranda'; else route(); }
     else { if (location.hash !== '#/login') location.hash = '#/login'; else route(); }
+    setTimeout(() => kbPeriksa(true), 2500); // TAHAP 10
     if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
   }
   init();
