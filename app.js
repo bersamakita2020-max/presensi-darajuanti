@@ -104,7 +104,7 @@
     clearTimers(); closeSheet();
     const [v, arg] = location.hash.replace(/^#\//, '').split('/');
     if (!S.token && v !== 'login') return viewLogin();
-    ({ login: viewLogin, aktivasi: viewAktivasi, beranda: viewBeranda, scan: () => viewScan(arg || 'MASUK'), ajukan: () => viewAjukan(arg || 'IZIN'), jadwal: () => viewJadwal(), tukar: () => (arg === 'baru' ? viewTukarBaru() : viewTukar()), riwayat: () => viewRiwayat(), pantau: () => viewPantau(arg), profil: viewProfil, hasil: viewHasilTerakhir }[v] || viewBeranda)();
+    ({ login: viewLogin, aktivasi: viewAktivasi, beranda: viewBeranda, konfirmasi: () => { history.replaceState(null, '', '#/beranda'); viewBeranda(); setTimeout(() => kbPeriksa(true), 400); }, scan: () => viewScan(arg || 'MASUK'), ajukan: () => viewAjukan(arg || 'IZIN'), jadwal: () => viewJadwal(), tukar: () => (arg === 'baru' ? viewTukarBaru() : viewTukar()), riwayat: () => viewRiwayat(), pantau: () => viewPantau(arg), profil: viewProfil, hasil: viewHasilTerakhir }[v] || viewBeranda)();
     window.scrollTo(0, 0);
   }
   function nav(aktif) {
@@ -952,7 +952,8 @@
     if (location.hash.indexOf('beranda') < 0 && location.hash !== '' && location.hash !== '#/') return;
     swKonteks();
     if (pushDidukung() && Notification.permission === 'granted') { // perbarui langganan diam-diam sekali sehari
-      if (Date.now() - (+LS.get('dj_push_t') || 0) > 86400000) { PUSH.proses = true; try { await pushLangganan(); } catch (e) { } PUSH.proses = false; }
+      let hilang = false; try { const rg = await navigator.serviceWorker.ready; hilang = !(await rg.pushManager.getSubscription()); } catch (e) { } // TAHAP 10h: langganan dicabut HP → daftar ulang segera
+      if (hilang || Date.now() - (+LS.get('dj_push_t') || 0) > 86400000) { PUSH.proses = true; try { await pushLangganan(); } catch (e) { } PUSH.proses = false; }
       return;
     }
     if (pasangTawar()) return; // belum terpasang: tawarkan pasang dulu
