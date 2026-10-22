@@ -1,5 +1,5 @@
 /* Service worker — cache cangkang aplikasi. Permintaan API (Apps Script) TIDAK pernah di-cache. */
-const VERSI = 'presensi-dj-v10.2.0';
+const VERSI = 'presensi-dj-v10.3.0';
 const CANGKANG = ['./', './index.html', './app.css', './app.js', './api.js', './scanner.js', './config.js', './vendor/jsQR.min.js', './manifest.webmanifest',
   './assets/logo-puskesmas.png', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/maskable-192.png', './icons/favicon.png', './icons/apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSI).then(c => c.addAll(CANGKANG)).then(() => self.skipWaiting())); });

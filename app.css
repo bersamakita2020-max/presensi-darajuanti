@@ -256,3 +256,4 @@ textarea.inp{min-height:92px;resize:vertical}
 .idc-nama{font-weight:800;font-size:16px;padding:0 10px}.idc-jab{font-size:12.5px;color:var(--muted);margin-bottom:8px}
 .idc-dl{text-align:left;padding:0 14px 10px;font-size:13px}.idc-dl div{display:flex;justify-content:space-between;gap:8px;border-top:1px solid #f0f2f5;padding:6px 0}.idc-dl span{color:var(--muted)}
 .idc-f{background:#f5f7fa;font-size:10.5px;color:var(--muted);padding:6px;letter-spacing:.3px}
+.kb-notif{color:#8a5a00;font-weight:600}

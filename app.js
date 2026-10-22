@@ -650,7 +650,8 @@
     } catch (e) { b.disabled = false; if (e.kode === 'AKSI' || e.kode === 'AKSES') return matikanPantau(e.message); toast(e.message, 'bad', 5000); }
   }
   function kbBaris(x, jenis) {
-    const tl = x.tl === 'TL_RESMI' ? ' · <b class="pl-tl">Tugas Lapangan disetujui</b>' : x.tl === 'TL_MENUNGGU' ? ' · <b class="pl-tl">Tugas Lapangan menunggu</b>' : '';
+    const tl0 = x.tl === 'TL_RESMI' ? ' · <b class="pl-tl">Tugas Lapangan disetujui</b>' : x.tl === 'TL_MENUNGGU' ? ' · <b class="pl-tl">Tugas Lapangan menunggu</b>' : '';
+    const tl = tl0 + (x.notif_aktif === false ? '<br><b class="kb-notif">🔕 Notifikasi belum aktif</b>' : '') + (x.uji ? '<br><b class="kb-notif">Akun uji</b>' : '');
     if (jenis === 'tidak') return '<div class="list-item pl-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + esc(x.unit) + (x.nip ? ' · ' + esc(x.nip) : '') + tl + '</span></div><span class="tag warn">' + (x.status === 'MENUNGGU' ? 'MENUNGGU' : 'TIDAK MERESPONS') + '</span></div>';
     return '<div class="list-item pl-item"><div class="m"><b>' + esc(x.nama) + '</b><span>' + esc(x.unit) + (x.nip ? ' · ' + esc(x.nip) : '') + '</span><span class="pl-baris">Jawab ' + esc(String(x.jam).replace(':', '.')) + ' · <b>' + Number(x.jarak).toLocaleString('id-ID') + ' m</b> dari ' + esc(x.lokasi) + ' · GPS ±' + esc(x.akurasi) + ' m' + tl + '</span>' + (x.peta ? '<a class="pl-peta" href="' + esc(x.peta) + '" target="_blank" rel="noopener">Lihat peta ›</a>' : '') + '</div><span class="tag ' + (jenis === 'luar' ? 'bad' : 'ok') + '">' + (jenis === 'luar' ? 'DI LUAR' : 'DI LOKASI') + '</span></div>';
   }
