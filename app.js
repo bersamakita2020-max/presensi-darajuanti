@@ -557,6 +557,15 @@
       const el = $('#pt-isi'); if (el) { el.classList.remove('memuat'); if (!P.m || !diam) el.innerHTML = '<div class="note bad"><span class="ni">!</span><div>' + esc(e.message) + '</div></div>' + (P.m ? '' : '<button class="btn sec" id="pt-ulang">Coba lagi</button>'); const u = $('#pt-ulang'); if (u) u.onclick = () => muatPantau(true); }
     }
   }
+  // TAHAP 10i: tanda merah = item BARU sejak tab terakhir dibuka (disimpan per akun di server). Server lama (tanpa 'baru') → perilaku lama.
+  function plBaru(P) { return !P.pl || P.pl.baru === undefined ? true : P.pl.baru > 0; }
+  function pantauDilihat(P) {
+    const m = P.tab === 'lok' && P.pl && P.pl.baru !== undefined ? 'PL' : P.tab === 'kb' && P.kb && P.kb.baru !== undefined ? 'KB' : '';
+    if (!m) return;
+    const d = m === 'PL' ? P.pl : P.kb; if (!(m === 'PL' ? d.baru : d.badge)) return;
+    if (m === 'PL') d.baru = 0; else d.badge = d.baru = 0;
+    api('pantau.lihat', { menu: m }).catch(() => {}); setTimeout(renderPantau, 0);
+  }
   function renderPantau() {
     const P = S.pt, m = P.m, k = m.kpi, el = $('#pt-isi'); if (!el) return;
     const fk = document.activeElement && document.activeElement.id === 'pt-q' ? document.activeElement.selectionStart : null;
@@ -575,8 +584,8 @@
       '<div class="pt-kpis">' + kp('Terjadwal', k.terjadwal, 'pegawai berdinas', '#1d4e89', 'belum') + kp('Sudah masuk', masuk, k.terjadwal ? Math.round(masuk / k.terjadwal * 100) + '% · tepat ' + k.hadir : '—', '#12873f', 'akt') +
       kp('Terlambat', k.terlambat, 'Σ ' + esc(m.kpi_teks || '0 menit'), '#c98a00', 'telat') + kp('Belum masuk', m.belum_total !== undefined ? m.belum_total : m.belum.length, 'belum ' + k.belum + ' · TK ' + k.TK, '#d64545', 'belum') +
       kp('Izin · Sakit · TL', k.I + k.S + k.TL, 'I ' + k.I + ' · S ' + k.S + ' · TL ' + k.TL, '#0e7c86', 'isl') + kp('Cuti', k.C || 0, 'sesuai jadwal', '#7c3aed', 'cuti') + '</div>' +
-      (L.lok.length ? '<button class="pl-alert" data-tab="lok"><span class="ni">!</span><div><b>' + L.lok.length + ' peringatan lokasi</b><span>Presensi di luar area lokasi kerja · ketuk untuk melihat daftar</span></div></button>' : '') +
-      '<div class="pt-tabs" role="tablist">' + PT_TAB.filter(t => (t[0] !== 'lok' || P.pl) && (t[0] !== 'kb' || P.kb)).map(t => '<button data-tab="' + t[0] + '" class="' + (P.tab === t[0] ? 'on' : '') + (t[0] === 'lok' ? ' pl-tab' : '') + '">' + t[1] + ' <i' + ((t[0] === 'lok' && L.lok.length) || (t[0] === 'kb' && P.kb && P.kb.badge) ? ' class="merah"' : '') + '>' + (t[0] === 'kb' && P.kb ? P.kb.badge : L[t[0]].length) + '</i></button>').join('') + '</div>' +
+      (L.lok.length && plBaru(P) ? '<button class="pl-alert" data-tab="lok"><span class="ni">!</span><div><b>' + L.lok.length + ' peringatan lokasi</b><span>Presensi di luar area lokasi kerja · ketuk untuk melihat daftar</span></div></button>' : '') +
+      '<div class="pt-tabs" role="tablist">' + PT_TAB.filter(t => (t[0] !== 'lok' || P.pl) && (t[0] !== 'kb' || P.kb)).map(t => '<button data-tab="' + t[0] + '" class="' + (P.tab === t[0] ? 'on' : '') + (t[0] === 'lok' ? ' pl-tab' : '') + '">' + t[1] + ' <i' + ((t[0] === 'lok' && L.lok.length && plBaru(P)) || (t[0] === 'kb' && P.kb && P.kb.badge) ? ' class="merah"' : '') + '>' + (t[0] === 'kb' && P.kb ? (P.kb.badge_total !== undefined ? P.kb.di_luar : P.kb.badge) : L[t[0]].length) + '</i></button>').join('') + '</div>' +
       '<div class="pt-cari"><input class="inp" id="pt-q" placeholder="Cari nama, NIP/NIK, unit…" value="' + esc(P.q) + '" autocomplete="off" inputmode="search"><button type="button" id="pt-x" aria-label="Hapus pencarian" style="visibility:' + (P.q ? 'visible' : 'hidden') + '">×</button></div>' +
       (P.tab === 'lok' && P.pl ? '<div class="pl-rentang"><button data-plr="1" class="' + (P.plRentang !== 7 ? 'on' : '') + '">Tanggal ini</button><button data-plr="7" class="' + (P.plRentang === 7 ? 'on' : '') + '">7 hari s.d. tanggal ini</button>' + (P.pl.jumlah ? '<button id="pl-xls" class="pl-xls">Unduh Excel</button>' : '') + '</div>' : '') +
       (P.tab === 'kb' && P.kb ? kbKepalaAtas(P) : '') +
@@ -584,6 +593,7 @@
       '<div class="sec-title">Unduh</div><button class="btn sec" id="pt-rekap">Rekap bulanan ' + esc(BULAN[+m.bulan.slice(5) - 1] + ' ' + m.bulan.slice(0, 4)) + ' (PDF)</button>' +
       '<p style="font-size:12px;color:var(--muted);margin:12px 0 4px">Mode pantau: hanya melihat, NIP/NIK disamarkan. Koreksi & persetujuan tetap dilakukan admin di panel admin.</p>';
     el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { P.tab = b.dataset.tab; renderPantau(); });
+    pantauDilihat(P);
     const q = $('#pt-q');
     q.oninput = () => { P.q = q.value.trim(); cariNipPantau(); isiDaftarPantau(L); $('#pt-x').style.visibility = P.q ? 'visible' : 'hidden'; };
     $('#pt-x').onclick = () => { q.value = ''; P.q = ''; isiDaftarPantau(L); $('#pt-x').style.visibility = 'hidden'; q.focus(); };

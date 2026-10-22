@@ -8,6 +8,6 @@ window.PRESENSI_CONFIG = {
   NAMA_INSTANSI: 'UPTD Puskesmas Dara Juanti',
   KABUPATEN: 'Kabupaten Sintang',
   LOGO: 'assets/logo-puskesmas.png', // ganti berkas ini untuk mengganti logo di aplikasi pegawai
-  VERSI: '1.10.4'
+  VERSI: '1.10.5'
   // Notifikasi HP memakai Web Push standar; kunci dibuat otomatis di server — tidak perlu diisi apa pun di sini.
 };
