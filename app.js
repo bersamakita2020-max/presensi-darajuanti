@@ -527,7 +527,7 @@
   }
   function tglHariIni() { const d = wib(now()); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
   function matikanPantau(pesan) { S.pantau = false; LS.del('dj_pantau'); if (pesan) toast(pesan, 'bad', 4500); go('beranda'); }
-  const PT_TAB = [['belum', 'Belum masuk'], ['telat', 'Terlambat'], ['isl', 'Izin/Sakit/TL'], ['cuti', 'Cuti'], ['akt', 'Aktivitas'], ['kb', 'Keberadaan'], ['lok', 'Peringatan Lokasi']];
+  const PT_TAB = [['belum', 'Belum masuk'], ['kb', 'Keberadaan'], ['telat', 'Terlambat'], ['isl', 'Izin/Sakit/TL'], ['cuti', 'Cuti'], ['akt', 'Aktivitas'], ['lok', 'Peringatan Lokasi']];
   async function viewPantau(tglArg) {
     if (!S.pantau) return go('beranda');
     const P = S.pt = S.pt || { tab: 'belum', q: '', lokasi: '', unit: '', ids: {}, idsQ: '' };
