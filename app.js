@@ -724,18 +724,78 @@
         '<p style="font-size:12px;color:var(--muted)">H hadir · T terlambat · PA pulang awal · TPP tidak presensi pulang · I/S/TL disetujui · TK tanpa keterangan</p>';
     } catch (e) { $('#isi').innerHTML = '<p>' + esc(e.message) + '</p>'; }
   }
+  // ---------- TAHAP 10e: ganti foto mandiri (pas foto 3:4) & kartu pegawai digital ----------
+  function gantiFoto(sesudah) {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    const el = openSheet('<h3>Ganti foto profil & ID card</h3><ul class="foto-tips"><li>Latar polos (putih/biru/merah), cahaya cukup</li><li>Wajah menghadap depan, jelas, tanpa kacamata hitam/masker</li><li>Foto ini langsung dipakai di profil dan kartu/name tag Anda</li></ul>' +
+      '<button class="btn pri" id="ft-kam" style="margin-bottom:10px">📷 Ambil dengan kamera</button><button class="btn sec" id="ft-gal">🖼️ Pilih dari galeri</button>');
+    const pilih = cap => { inp.removeAttribute('capture'); if (cap) inp.setAttribute('capture', 'user'); inp.value = ''; inp.click(); };
+    $('#ft-kam', el).onclick = () => pilih(true); $('#ft-gal', el).onclick = () => pilih(false);
+    inp.onchange = () => { const f = inp.files && inp.files[0]; if (!f) return; if (!/^image\//.test(f.type)) return toast('Pilih berkas gambar.', 'bad'); if (f.size > 15 * 1048576) return toast('Gambar terlalu besar (maks 15 MB).', 'bad'); closeSheet(); potongFoto(f, sesudah); };
+  }
+  function potongFoto(file, sesudah) {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const W = 270, H = 360; // bingkai 3:4
+      const d = document.createElement('div'); d.className = 'crop-layar'; d.id = 'crop-layar';
+      d.innerHTML = '<div class="crop-kotak"><h3>Atur posisi foto</h3><p>Geser foto dan atur zoom hingga wajah pas di bingkai.</p><div class="crop-bingkai" style="width:' + W + 'px;height:' + H + 'px"><canvas id="crop-cv" width="' + W * 2 + '" height="' + H * 2 + '"></canvas><div class="crop-garis"></div></div>' +
+        '<label class="crop-zoom">Zoom <input type="range" id="crop-z" min="1" max="4" step="0.01" value="1"></label><div id="crop-ps"></div><div class="push-aksi"><button class="btn sec" id="crop-batal">Batal</button><button class="btn pri" id="crop-ok">Simpan foto</button></div></div>';
+      document.body.appendChild(d);
+      const cv = $('#crop-cv', d), cx = cv.getContext('2d'), base = Math.max(W / img.width, H / img.height);
+      let z = 1, ox = 0, oy = 0; // geser (px bingkai)
+      const batas = () => { const s = base * z, iw = img.width * s, ih = img.height * s; ox = Math.min(0, Math.max(W - iw, ox)); oy = Math.min(0, Math.max(H - ih, oy)); };
+      const pusat = () => { const s = base * z; ox = (W - img.width * s) / 2; oy = (H - img.height * s) / 2; };
+      const gambar = () => { batas(); const s = base * z; cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(img, ox * 2, oy * 2, img.width * s * 2, img.height * s * 2); };
+      pusat(); gambar();
+      const zi = $('#crop-z', d);
+      zi.oninput = () => { const s0 = base * z, cxp = (W / 2 - ox) / s0, cyp = (H / 2 - oy) / s0; z = +zi.value; const s = base * z; ox = W / 2 - cxp * s; oy = H / 2 - cyp * s; gambar(); };
+      let seret = null, jari = {};
+      cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); jari[e.pointerId] = { x: e.clientX, y: e.clientY }; seret = { x: e.clientX, y: e.clientY, ox, oy }; });
+      cv.addEventListener('pointermove', e => { if (!seret || !jari[e.pointerId]) return; const ids = Object.keys(jari); jari[e.pointerId] = { x: e.clientX, y: e.clientY }; if (ids.length > 1) return; ox = seret.ox + (e.clientX - seret.x); oy = seret.oy + (e.clientY - seret.y); gambar(); });
+      const lepas = e => { delete jari[e.pointerId]; if (!Object.keys(jari).length) seret = null; };
+      cv.addEventListener('pointerup', lepas); cv.addEventListener('pointercancel', lepas);
+      cv.addEventListener('wheel', e => { e.preventDefault(); zi.value = Math.min(4, Math.max(1, z * (e.deltaY < 0 ? 1.08 : 0.93))); zi.oninput(); }, { passive: false });
+      const tutup = () => { d.remove(); URL.revokeObjectURL(url); };
+      $('#crop-batal', d).onclick = tutup;
+      $('#crop-ok', d).onclick = async () => {
+        const b = $('#crop-ok', d), ps = $('#crop-ps', d); b.disabled = true; b.innerHTML = '<span class="spin"></span> Menyimpan…'; ps.innerHTML = '';
+        try {
+          const out = document.createElement('canvas'); out.width = 600; out.height = 800; const o = out.getContext('2d'), s = base * z * (600 / W);
+          o.fillStyle = '#fff'; o.fillRect(0, 0, 600, 800); o.drawImage(img, ox * (600 / W), oy * (600 / W), img.width * s, img.height * s);
+          let q = 0.82, du = out.toDataURL('image/jpeg', q);
+          while (du.length * 0.75 > 290 * 1024 && q > 0.4) { q -= 0.08; du = out.toDataURL('image/jpeg', q); }
+          const r = await api('profil.foto', { b64: du }, { ulang: 1, timeout: 40000 });
+          tutup(); toast('Foto diperbarui. Berlaku di profil dan ID card.', 'ok', 4000); if (sesudah) sesudah(r.foto);
+        } catch (e) { ps.innerHTML = '<div class="note bad"><span class="ni">!</span><div>' + esc(e.message) + '</div></div>'; b.disabled = false; b.textContent = 'Coba lagi'; }
+      };
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); toast('Gambar tidak dapat dibaca. Coba foto lain.', 'bad'); };
+    img.src = url;
+  }
+  function kartuPegawai(p) {
+    const el = openSheet('<div class="idc"><div class="idc-h"><img src="' + esc(logo()) + '" alt=""><div><b>' + esc(C.NAMA_INSTANSI) + '</b><small>' + esc(C.KABUPATEN) + '</small></div></div>' +
+      '<div class="idc-foto">' + (p.foto ? '<img src="' + esc(p.foto) + '" alt="Foto">' : '<span>' + esc(p.inisial) + '</span>') + '</div>' +
+      '<div class="idc-nama">' + esc(p.nama) + '</div><div class="idc-jab">' + esc(p.jabatan || '') + '</div>' +
+      '<div class="idc-dl"><div><span>' + (p.jenis_nomor || 'NIP/NIK') + '</span><b>' + esc(p.nip) + '</b></div><div><span>Unit</span><b>' + esc(p.unit || '-') + '</b></div><div><span>Status</span><b>' + esc(p.kategori_label || '') + '</b></div></div>' +
+      '<div class="idc-f">KARTU PEGAWAI DIGITAL · bukan pengganti QR name tag presensi</div></div>' +
+      (p.foto_mandiri ? '<button class="btn sec" id="idc-ganti" style="margin-top:12px">Ganti foto</button>' : '') + '<button class="btn pri" id="s-ok" style="margin-top:10px">Tutup</button>');
+    $('#s-ok', el).onclick = closeSheet;
+    const g = $('#idc-ganti', el); if (g) g.onclick = () => { closeSheet(); gantiFoto(f => { p.foto = f; viewProfil(); }); };
+  }
   // ---------- PROFIL ----------
   async function viewProfil() {
     app.innerHTML = '<div class="view">' + appbar('Profil') + '<div class="pad" id="isi"><div class="loading"><span class="spin d"></span></div></div></div>' + nav('profil');
     try {
       const p = await api('profil', {});
-      $('#isi').innerHTML = '<div class="card" style="text-align:center"><div class="avatar" style="width:86px;height:86px;margin:4px auto 10px;background:var(--hijauL);color:var(--hijau);border-color:var(--hijauL);font-size:28px">' + (p.foto ? '<img src="' + esc(p.foto) + '" alt="">' : esc(p.inisial)) + '</div><b style="font-size:18px">' + esc(p.nama) + '</b><div style="color:var(--muted);font-size:14px">' + esc(p.jabatan) + ' · ' + esc(p.unit) + '</div><div style="margin-top:8px"><span class="tag ok">' + esc(p.kategori_label) + '</span> <span class="tag mut">' + esc(p.grup_jadwal) + '</span></div></div>' +
+      $('#isi').innerHTML = '<div class="card" style="text-align:center"><div class="avatar" style="width:86px;height:86px;margin:4px auto 10px;background:var(--hijauL);color:var(--hijau);border-color:var(--hijauL);font-size:28px">' + (p.foto ? '<img src="' + esc(p.foto) + '" alt="">' : esc(p.inisial)) + '</div>' + (p.foto_mandiri ? '<button class="btn-link" id="b-foto" style="margin:-4px 0 8px">📷 Ganti foto</button><br>' : '') + '<b style="font-size:18px">' + esc(p.nama) + '</b><div style="color:var(--muted);font-size:14px">' + esc(p.jabatan) + ' · ' + esc(p.unit) + '</div><div style="margin-top:8px"><span class="tag ok">' + esc(p.kategori_label) + '</span> <span class="tag mut">' + esc(p.grup_jadwal) + '</span></div></div>' +
         '<div class="card dl"><div><span>NIP/NIK</span><b>' + esc(p.nip) + '</b></div><div><span>Golongan</span><b>' + esc(p.golongan || '—') + '</b></div><div><span>Perangkat terdaftar</span><b>' + esc(p.perangkat ? p.perangkat.label : '-') + '</b></div><div><span>Terdaftar sejak</span><b>' + esc(p.perangkat ? p.perangkat.sejak : '-') + '</b></div></div>' +
-        '<button class="btn sec" id="b-sandi" style="margin-bottom:10px">Ganti kata sandi</button><button class="btn sec" id="b-pin" style="margin-bottom:10px">Ganti PIN</button>' +
+        '<button class="btn sec" id="b-kartu" style="margin-bottom:10px">🪪 Kartu pegawai digital</button><button class="btn sec" id="b-sandi" style="margin-bottom:10px">Ganti kata sandi</button><button class="btn sec" id="b-pin" style="margin-bottom:10px">Ganti PIN</button>' +
         (terpasang() ? '' : '<button class="btn sec" id="b-pasang" style="margin-bottom:10px">📲 Tambahkan ke Layar Utama</button>') + (!iosBelumLayarUtama() && pushDidukung() && Notification.permission !== 'granted' && Notification.permission !== 'denied' ? '<button class="btn sec" id="b-notif" style="margin-bottom:10px">🔔 Aktifkan notifikasi</button>' : '') +
         '<button class="btn sec" id="b-priv" style="margin-bottom:10px">Pemberitahuan privasi</button><button class="btn bad" id="b-out">Keluar</button>' +
         '<p style="font-size:12px;color:var(--muted);text-align:center;margin-top:14px">Ganti HP? Minta admin mereset perangkat. Menghapus data browser juga memerlukan pendaftaran ulang perangkat.<br>v' + esc(C.VERSI) + '</p>';
       $('#b-priv').onclick = sheetPrivasi;
+      $('#b-kartu').onclick = () => kartuPegawai(p);
+      if ($('#b-foto')) $('#b-foto').onclick = () => gantiFoto(() => viewProfil());
       $('#b-out').onclick = async () => { try { await api('logout', {}); } catch (e) { } keluarLokal(); go('login'); };
       if ($('#b-pasang')) $('#b-pasang').onclick = () => pasangSekarang();
       if ($('#b-notif')) $('#b-notif').onclick = async () => { try { await pushAktifkan(); $('#b-notif').remove(); toast('Notifikasi aktif.', 'ok'); } catch (e) { toast(e.message, 'bad', 5000); } };
